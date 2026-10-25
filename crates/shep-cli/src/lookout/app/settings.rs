@@ -571,7 +571,63 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::lookout::field::PER_DOG_KEYS;
     use crate::lookout::view::fixtures;
+
+    /// Every leaf of `shep.toml`'s schema, as a dotted key, walked straight
+    /// off the JSON: a section is a property that resolves to an object with
+    /// properties, anything else (a map, a list, a scalar) is one leaf.
+    fn schema_leaves(node: &serde_json::Value, defs: &serde_json::Value, at: &str) -> Vec<String> {
+        let mut leaves = Vec::new();
+        let properties = node["properties"].as_object().into_iter().flatten();
+        for (name, property) in properties {
+            let key = if at.is_empty() {
+                name.clone()
+            } else {
+                format!("{at}.{name}")
+            };
+            let target = property["$ref"]
+                .as_str()
+                .and_then(|reference| reference.strip_prefix("#/$defs/"))
+                .map_or(property, |def| &defs[def]);
+            if target["properties"].is_object() {
+                leaves.extend(schema_leaves(target, defs, &key));
+            } else {
+                leaves.push(key);
+            }
+        }
+        leaves
+    }
+
+    /// A key added to `DaemonConfig` shows up in the schema, so this fails
+    /// until the screen draws it. The four per-dog keys are the exception:
+    /// the dog's own row carries them.
+    #[test]
+    fn the_tree_has_a_row_for_every_leaf_of_the_schema_but_the_per_dog_keys() {
+        let schema = shep_core::config::daemon_config_schema_json().to_value();
+        let mut expected = schema_leaves(&schema, &schema["$defs"], "");
+        expected.retain(|key| !PER_DOG_KEYS.contains(&key.as_str()));
+        expected.sort();
+
+        let app = fixtures::app_in_settings();
+        let settings = app.settings().unwrap();
+        let fields = crate::lookout::field::shep_toml_shape().fields.fields();
+        let mut drawn: Vec<String> = settings
+            .rows()
+            .into_iter()
+            .filter_map(|row| match row {
+                SettingsRow::Field(index) => Some(fields[index].key.clone()),
+                _ => None,
+            })
+            .collect();
+        drawn.sort();
+
+        assert!(
+            expected.len() > 10,
+            "the walk found the schema: {expected:?}"
+        );
+        assert_eq!(drawn, expected);
+    }
 
     #[test]
     fn set_style_round_trips_exactly() {
