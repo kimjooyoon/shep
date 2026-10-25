@@ -144,6 +144,19 @@ pub fn app_in_settings_with_shadowed_style(source: StyleSource) -> App {
     app
 }
 
+/// The settings screen over a `shep.toml` that says nothing about `[style]`,
+/// so `full` is in force by default. The cursor sits on the style row.
+pub fn app_in_settings_with_silent_style() -> App {
+    let mut app = app_in_settings_on("style.level");
+    let mut snapshot = settings_snapshot();
+    snapshot.document.remove("style");
+    snapshot.style = (StyleLevel::Full, StyleSource::Default);
+    app.update(Msg::Settings {
+        result: Ok(snapshot),
+    });
+    app
+}
+
 /// [`app_in_settings`] with the control gate open, for the one test that
 /// proves an action key stays unreachable even when actions would otherwise
 /// be permitted.

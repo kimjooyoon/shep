@@ -104,6 +104,19 @@ mod tests {
         assert_ne!(first, second);
     }
 
+    /// `[style] level` has no schema default, and `full` is what is in force
+    /// when the file is silent, so the first step is `plain`.
+    #[test]
+    fn the_style_cycle_from_a_silent_file_does_not_propose_the_level_in_force() {
+        let mut app = fixtures::app_in_settings_with_silent_style();
+        let _ = app.update(Msg::Key(KeyPress::Cycle));
+        let text = app.settings().unwrap().pending().unwrap().text.to_string();
+        assert!(
+            text.contains("set style level to plain"),
+            "the file says nothing, so full is in force and one step is plain: {text}"
+        );
+    }
+
     /// With `$SHEP_STYLE=bare` over a file saying `full`, cycling the resolved
     /// value would propose `full`: a no-op write, reported as a change.
     #[test]

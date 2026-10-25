@@ -2,7 +2,7 @@
 //! shows.
 
 use super::*;
-use crate::commands::settings::{Shape, dotted};
+use crate::commands::settings::{STYLE_LEVEL_KEY, Shape, dotted};
 use crate::lookout::field::{Child, Field, FieldKind, shep_toml_shape};
 use std::collections::BTreeSet;
 
@@ -253,6 +253,11 @@ impl Settings {
                         .as_str()
                         .map_or_else(|| value.to_string(), str::to_owned)
                 })
+            })
+            // The schema carries no default for `[style] level`; `full` is
+            // what `style::resolve` falls back to.
+            .or_else(|| {
+                (field.key == STYLE_LEVEL_KEY).then(|| crate::style::StyleLevel::Full.to_string())
             });
         match &field.kind {
             FieldKind::Bool => Some((base.as_deref() != Some("true")).to_string()),

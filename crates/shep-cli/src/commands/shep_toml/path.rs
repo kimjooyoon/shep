@@ -7,7 +7,7 @@
 
 use std::fmt;
 
-use toml_edit::{Item, Table, Value};
+use toml_edit::{Item, Table, TableLike, Value};
 
 use super::ShepToml;
 
@@ -48,7 +48,7 @@ impl ShepToml {
     ///
     /// # Errors
     /// [`PathError::NotATable`] if a key above the target is in the file as
-    /// something other than a table.
+    /// something other than a table. An inline table counts as one.
     pub(crate) fn set_path(&mut self, path: &[String], value: Value) -> Result<(), PathError> {
         let Some((last, parents)) = path.split_last() else {
             return Ok(());
@@ -65,14 +65,14 @@ impl ShepToml {
     }
 
     /// Removes the key at `path`. Does nothing when it, or a table above
-    /// it, is absent or not a table.
+    /// it, is absent or not a table. An inline table counts as one.
     pub(crate) fn unset_path(&mut self, path: &[String]) {
         let Some((last, parents)) = path.split_last() else {
             return;
         };
-        let mut table = self.doc.as_table_mut();
+        let mut table: &mut dyn TableLike = self.doc.as_table_mut();
         for key in parents {
-            let Some(next) = table.get_mut(key).and_then(Item::as_table_mut) else {
+            let Some(next) = table.get_mut(key).and_then(Item::as_table_like_mut) else {
                 return;
             };
             table = next;
@@ -89,9 +89,9 @@ impl ShepToml {
 
 /// `table` descended through `keys`, creating each missing table.
 fn descend_creating<'a>(
-    mut table: &'a mut Table,
+    mut table: &'a mut dyn TableLike,
     keys: &[String],
-) -> Result<&'a mut Table, PathError> {
+) -> Result<&'a mut dyn TableLike, PathError> {
     let mut walked = Vec::new();
     for key in keys {
         walked.push(key.as_str());
@@ -99,10 +99,12 @@ fn descend_creating<'a>(
             .entry(key)
             .or_insert_with(|| Item::Table(Table::new()));
         let found = item.type_name();
-        table = item.as_table_mut().ok_or_else(|| PathError::NotATable {
-            at: walked.join("."),
-            found,
-        })?;
+        table = item
+            .as_table_like_mut()
+            .ok_or_else(|| PathError::NotATable {
+                at: walked.join("."),
+                found,
+            })?;
     }
     Ok(table)
 }

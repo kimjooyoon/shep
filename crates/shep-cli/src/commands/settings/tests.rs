@@ -414,6 +414,67 @@ fn unsetting_a_key_returns_it_to_the_default() {
     }
 }
 
+/// `DaemonConfig::load` takes `daemon = { ... }` and `interpreters = { ... }`
+/// as it takes the headed tables, and the screen reads them, so it writes them.
+mod inline_tables {
+    use super::*;
+
+    const INLINE: &str = "\
+daemon = { log_level = \"info\", max_cron_sleep = \"30s\" }
+interpreters = { py = \"python3\" }
+";
+
+    #[test]
+    fn a_key_in_an_inline_table_is_edited_in_place() {
+        let (_dir, path) = write(INLINE);
+
+        apply_setting(&path, &set("daemon.log_level", "debug")).unwrap();
+        apply_setting(
+            &path,
+            &SettingEdit::Set {
+                path: vec!["interpreters".into(), "py".into()],
+                shape: Shape::Text,
+                value: "python3.13".into(),
+            },
+        )
+        .unwrap();
+
+        let snap = snapshot(&path);
+        assert_eq!(view(&snap, "daemon.log_level").value, "debug");
+        assert_eq!(
+            snap.entries("interpreters"),
+            vec![("py".to_owned(), "python3.13".to_owned())]
+        );
+        assert!(
+            std::fs::read_to_string(&path)
+                .unwrap()
+                .contains("max_cron_sleep = \"30s\""),
+            "the sibling key stays"
+        );
+    }
+
+    #[test]
+    fn a_key_in_an_inline_table_is_unset_and_reads_as_the_default() {
+        let (_dir, path) = write(INLINE);
+
+        apply_setting(
+            &path,
+            &SettingEdit::Unset {
+                path: path_of("daemon.max_cron_sleep"),
+            },
+        )
+        .unwrap();
+
+        let shown = view(&snapshot(&path), "daemon.max_cron_sleep");
+        assert_eq!(shown.source, StyleSource::Default);
+        assert_eq!(
+            view(&snapshot(&path), "daemon.log_level").value,
+            "info",
+            "only the named key goes"
+        );
+    }
+}
+
 #[test]
 fn every_built_in_dog_is_a_candidate_even_when_nothing_is_enabled() {
     let (_dir, path) = write("");

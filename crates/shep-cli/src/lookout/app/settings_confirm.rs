@@ -56,11 +56,8 @@ pub(crate) fn apply_needs(apply: Option<&str>) -> &'static str {
 fn cost(key: &str) -> String {
     let shape = shep_toml_shape();
     let field = shape.fields.by_key(key).or_else(|| {
-        shape
-            .paths
-            .get(key)
-            .and_then(|path| path.first())
-            .and_then(|first| shape.fields.by_key(first))
+        key.rsplit_once('.')
+            .and_then(|(map, _)| shape.fields.by_key(map))
     });
     let apply = field.and_then(|field| field.apply.as_deref());
     let needs = apply_needs(apply);
@@ -103,5 +100,32 @@ fn style_confirm_text(value: &str, source: StyleSource) -> String {
         StyleSource::Flag => format!(
             "set style level to {value}? it goes in the file, but --style was passed to this lookout and keeps winning for as long as it runs"
         ),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::commands::settings::Shape;
+
+    /// The row of a map draws the map's cost, so the confirm for one of its
+    /// entries says the same.
+    #[test]
+    fn a_map_entrys_confirm_names_the_cost_its_map_row_shows() {
+        let map = shep_toml_shape().fields.by_key("interpreters").unwrap();
+        let shown = apply_needs(map.apply.as_deref());
+        let entry = |edit: SettingEdit| confirm_text(&edit, StyleSource::Default);
+
+        let set = entry(SettingEdit::Set {
+            path: vec!["interpreters".into(), "py".into()],
+            shape: Shape::Text,
+            value: "python3".into(),
+        });
+        let remove = entry(SettingEdit::Unset {
+            path: vec!["interpreters".into(), "py".into()],
+        });
+
+        assert_eq!(set, format!("set interpreters.py to python3? {shown}"));
+        assert_eq!(remove, format!("remove interpreters.py? {shown}"));
     }
 }
