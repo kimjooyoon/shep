@@ -27,6 +27,11 @@ pub use flockfile::{
     DISCOVERY_ORDER, DeclaredApp, FlockFormat, Flockfile, FlockfileError, discover,
 };
 #[cfg(feature = "schema")]
+pub use daemon::{
+    APPLY_KEY, APPLY_NEXT_COMMAND, APPLY_RELOAD, APPLY_RESTART, APPLY_WHISTLE,
+    daemon_config_schema_json,
+};
+#[cfg(feature = "schema")]
 pub use flockfile::{flockfile_schema_json, flockfile_schema_string};
 pub use graph::{BootNode, BootPlan, NodeKind, Unresolved, plan, render_cycle};
 pub use kill_signal::KillSignal;
