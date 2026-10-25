@@ -79,8 +79,8 @@ impl Tree {
     /// [`Signal::Kill`] skips the wait.
     ///
     /// A child that has left its group with `setpgid` or `setsid` is signalled
-    /// and killed by its own pid instead. Its descendants that stayed in the
-    /// group are reached only while the group is still led by that pid.
+    /// and killed by its own pid as well as the group, which its descendants
+    /// that stayed in it keep reachable.
     ///
     /// If `child` exits within the grace, it is reaped before the final kill
     /// names its group by pid. While any member lives the group keeps the pid
@@ -131,16 +131,21 @@ impl Tree {
         signal != Signal::Kill
     }
 
-    /// The group led by `child`, or `child` alone once it has left that group
-    /// with `setpgid` or `setsid`, which would leave the group empty.
+    /// The group `child` led, and `child` itself once it has left that group
+    /// with `setpgid` or `setsid`, even while descendants keep the group alive.
     ///
     /// `child` must not be reaped: a reaped pid may name a stranger.
     #[cfg(unix)]
     fn deliver(child: &Child, signal: Signal) -> Result<(), crate::group::GroupError> {
-        match crate::group::signal_group(child.id(), signal) {
-            Err(error) if error.is_gone() => crate::group::signal_process(child.id(), signal),
-            other => other,
+        use crate::group::{has_left_group, signal_group, signal_process};
+
+        let group = signal_group(child.id(), signal);
+        let gone = group.as_ref().is_err_and(|error| error.is_gone());
+        if gone || has_left_group(child.id()) {
+            signal_process(child.id(), signal)?;
+            return if gone { Ok(()) } else { group };
         }
+        group
     }
 
     /// Kills the tree. `reaped` is whether `child` has been waited on, so its
@@ -254,15 +259,35 @@ mod tests {
         // `perl`, since `setsid(1)` is absent on macOS. The child puts itself
         // in a group of its own, so the group `spawn` made is empty and every
         // group signal answers `ESRCH`.
-        let (tree, mut child, line) = spawn_ready(
-            r#"exec perl -e '$SIG{TERM} = "IGNORE"; setpgrp(0, 0); print "ready\n"; $| = 1; sleep 600'"#,
+        stop_a_child_that_left_its_group(
+            r#"exec perl -e '$SIG{TERM} = "IGNORE"; setpgrp(0, 0); $| = 1; print "ready\n"; sleep 600'"#,
         );
+    }
+
+    #[test]
+    fn a_child_that_left_a_group_a_descendant_keeps_alive_is_still_stopped() {
+        // The forked descendant stays in the original group, so group signals
+        // succeed against it and never reach the child.
+        stop_a_child_that_left_its_group(
+            r#"exec perl -e '$SIG{TERM} = "IGNORE"; $| = 1; fork or sleep 600; setpgrp(0, 0); print "ready\n"; sleep 600'"#,
+        );
+    }
+
+    /// Stops a child that ignores SIGTERM and has left its group, on a thread:
+    /// a regression blocks in `wait`, and the test should fail rather than hang.
+    fn stop_a_child_that_left_its_group(script: &str) {
+        let (tree, mut child, line) = spawn_ready(script);
         let _cleanup = Cleanup(child.id());
         assert_eq!(line, "ready");
 
         let grace = Duration::from_millis(300);
         let started = Instant::now();
-        let status = tree.stop(&mut child, Signal::Term, grace).unwrap();
+        let (done, stopped) = mpsc::channel();
+        std::thread::spawn(move || done.send(tree.stop(&mut child, Signal::Term, grace)));
+        let status = stopped
+            .recv_timeout(Duration::from_secs(10))
+            .expect("stop blocked on a child that left its group")
+            .unwrap();
 
         assert!(started.elapsed() >= grace, "the child was given its grace");
         assert_eq!(status.signal(), Some(9));

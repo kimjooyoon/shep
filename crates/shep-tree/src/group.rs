@@ -8,7 +8,7 @@ use nix::errno::Errno;
 #[cfg(unix)]
 use nix::sys::signal::{self, Signal as NixSignal};
 #[cfg(unix)]
-use nix::unistd::Pid;
+use nix::unistd::{Pid, getpgid};
 
 /// A signal [`Tree::stop`](crate::Tree::stop) and `signal_group` (unix) can send.
 ///
@@ -140,6 +140,17 @@ fn send(pid: u32, signal: NixSignal) -> Result<(), GroupError> {
 pub(crate) fn signal_process(pid: u32, signal: Signal) -> Result<(), GroupError> {
     let target = signallable_pid(pid)?;
     deliver(pid, Pid::from_raw(target), signal.to_nix())
+}
+
+/// Whether `pid` is in a process group other than the one it would lead.
+///
+/// `false` when that cannot be told, such as a process that is already gone.
+#[cfg(unix)]
+pub(crate) fn has_left_group(pid: u32) -> bool {
+    let Ok(raw) = i32::try_from(pid) else {
+        return false;
+    };
+    matches!(getpgid(Some(Pid::from_raw(raw))), Ok(group) if group.as_raw() != raw)
 }
 
 #[cfg(unix)]
