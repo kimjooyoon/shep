@@ -104,8 +104,9 @@ impl App {
             .config_pane()
             .filter(|pane| matches!(pane.target(), PaneTarget::Sheep { .. }))
             .map(|pane| pane.dogs_tab().clone());
-        // A dog's row is carried by name: a re-read can list a table above it.
-        let carried_dog = self.config_pane().and_then(ConfigPane::cursor_dog_name);
+        // The cursor among the dogs is carried by name: a re-read can list a
+        // table above it.
+        let carried_dog = self.config_pane().and_then(ConfigPane::dog_anchor);
         // The pending set survives the rebuild: the values are
         // the shepherd's and the edits are the operator's. An open
         // editor is dropped. See `ConfigPane::adopt_edits`.
@@ -125,7 +126,7 @@ impl App {
             pane.adopt_view(carried);
         }
         if let Some(dog) = carried_dog {
-            pane.adopt_dog_cursor(&dog);
+            pane.restore_dog_anchor(&dog);
         }
         if let Some(env_key) = carried_env_key {
             pane.adopt_env_cursor(env_key.as_deref());
@@ -243,12 +244,14 @@ impl App {
                     self.notice = Some(Notice::grave(text));
                     return Effect::None;
                 }
+                // Tables are read again first: the dialog's `c`, `R` and `L`
+                // write them too. See [`Self::on_close_reread`].
+                if let Some(effect) = self.reread_before_closing() {
+                    return effect;
+                }
                 if let Some(dialog) = self.close_offer() {
                     self.close_dialog = Some(dialog);
                     return Effect::None;
-                }
-                if let Some(effect) = self.reread_before_closing() {
-                    return effect;
                 }
                 let writes = self.take_pane_writes();
                 self.close_pane();

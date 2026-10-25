@@ -40,7 +40,8 @@ impl App {
 
     /// The answer to [`Self::reread_before_closing`]'s read.
     ///
-    /// The tables the pane holds: the write goes out and the pane closes. A
+    /// The tables the pane holds: the write goes out and the pane closes, or
+    /// the close dialog asks its question first. A
     /// moved table: the pane takes it under the same edits and writes
     /// nothing. The next `Escape` writes. A failed read changes nothing.
     pub(in crate::lookout::app) fn on_close_reread(
@@ -56,7 +57,7 @@ impl App {
             (Ok(Response::SheepConfig(view)), PaneTarget::Sheep { name: sheep }) => {
                 let moved = pane.moved_tables(&view);
                 if moved.is_empty() {
-                    return self.write_and_close();
+                    return self.offer_or_write_and_close();
                 }
                 // The pane is rebuilt under the same edits, the open tables
                 // taking the sheep's current ones.
@@ -90,6 +91,16 @@ impl App {
         } else {
             ""
         }
+    }
+
+    /// Asks the close dialog's question when the pane has one, else
+    /// [`Self::write_and_close`]. The tables it would write are fresh.
+    fn offer_or_write_and_close(&mut self) -> Effect {
+        if let Some(dialog) = self.close_offer() {
+            self.close_dialog = Some(dialog);
+            return Effect::None;
+        }
+        self.write_and_close()
     }
 
     /// Sends everything the pane has filed and closes it, unless a filed
@@ -227,6 +238,53 @@ mod tests {
         assert_eq!(
             written,
             json!({ "concurrency": 4, "token": ROTATED, "retries": 5 })
+        );
+    }
+
+    /// The dialog's `c` writes the tables too, so it asks only after the
+    /// re-read found them unmoved.
+    #[test]
+    fn the_close_dialog_waits_for_the_re_read_and_a_moved_table_skips_it() {
+        let mut app = app_in_jobs_table();
+        type_concurrency(&mut app, "4");
+        crate::lookout::view::fixtures::file_edit(&mut app, "cwd", "/srv/second");
+        assert_eq!(
+            app.update(Msg::Key(KeyPress::Escape)),
+            Effect::Send(Sent::SheepConfig { name: "web".into() }),
+            "the tables are read before the dialog asks"
+        );
+        assert!(
+            !app.close_dialog().is_some(),
+            "no question while the read is out"
+        );
+        let moved = json!({ "concurrency": 2, "token": ROTATED });
+        assert_eq!(answer_web(&mut app, web_with_jobs(&moved)), Effect::None);
+        assert!(
+            !app.close_dialog().is_some(),
+            "a moved table holds the pane"
+        );
+        assert!(
+            app.notice()
+                .is_some_and(|notice| notice.to_string().contains("nothing was written"))
+        );
+
+        assert_eq!(
+            app.update(Msg::Key(KeyPress::Escape)),
+            Effect::Send(Sent::SheepConfig { name: "web".into() })
+        );
+        assert_eq!(answer_web(&mut app, web_with_jobs(&moved)), Effect::None);
+        assert!(
+            app.close_dialog().is_some(),
+            "an unmoved table lets the dialog ask"
+        );
+        let batch = wire_batch(app.update(Msg::Key(KeyPress::Continue)));
+        assert!(
+            batch.iter().any(|sent| matches!(
+                sent,
+                Sent::SetSheepDogTable { dog, table: Some(table), .. }
+                    if dog == "jobs" && table.as_map().get("token") == Some(&json!(ROTATED))
+            )),
+            "{batch:?}"
         );
     }
 

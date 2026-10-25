@@ -182,6 +182,14 @@ enum Listing {
     Listed,
 }
 
+/// Where the cursor sits among the dogs, by name so a rebuild that shifts
+/// the rows does not leave it on a neighbour.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(in crate::lookout) struct DogAnchor {
+    name: String,
+    inside: bool,
+}
+
 /// The tab's state: its rows, and at most one armed removal.
 ///
 /// `Debug` is manual (IR-41), for [`SheepDogEntry`]'s reason.
@@ -400,10 +408,14 @@ impl ConfigPane {
         // A built-in with no sheep schema has nothing to hold, unless the
         // sheep carries a table for it anyway.
         rows.retain(|row| row.asked != Asked::Yes || row.entry.schema.is_some() || row.has_table());
+        let anchor = self.dog_anchor();
         self.dogs_tab.rows = rows;
         self.dogs_tab.listing = Listing::Listed;
         self.dogs_tab.add_table_only(&tables);
         self.clamp_view();
+        if let Some(anchor) = anchor {
+            self.restore_dog_anchor(&anchor);
+        }
     }
 
     /// Opens the dog at `dog` if it is closed, else closes it.
@@ -466,7 +478,14 @@ impl ConfigPane {
             return Some(DogToggle::Closed);
         }
         row.open = false;
-        Some(self.open_dog(dog))
+        // The answer can land after the cursor moved off the row, and the
+        // table it draws shifts every row below it.
+        let anchor = self.dog_anchor();
+        let toggled = self.open_dog(dog);
+        if let Some(anchor) = anchor {
+            self.restore_dog_anchor(&anchor);
+        }
+        Some(toggled)
     }
 
     /// Carries a previous pane's tab onto this one's tables, for a re-read
@@ -559,23 +578,50 @@ impl ConfigPane {
         self.view.move_to(head + 1 + within, len);
     }
 
-    /// The dog whose row the cursor is on.
+    /// The dog the cursor is on, by name, and whether it is inside the
+    /// dog's open table.
     #[must_use]
-    pub(in crate::lookout) fn cursor_dog_name(&self) -> Option<String> {
-        let PaneRow::Dog(dog) = self.cursor()? else {
-            return None;
+    pub(in crate::lookout) fn dog_anchor(&self) -> Option<DogAnchor> {
+        let (dog, inside) = match self.cursor()? {
+            PaneRow::Dog(dog) => (dog, false),
+            PaneRow::Under { dog, .. } => (dog, true),
+            _ => return None,
         };
-        Some(self.dogs_tab.rows.get(dog)?.name().to_owned())
+        Some(DogAnchor {
+            name: self.dogs_tab.rows.get(dog)?.name().to_owned(),
+            inside,
+        })
     }
 
-    /// Puts the cursor on `name`'s row, if it is listed. A re-read can add
-    /// a table above the cursor, and a cursor carried by index would then
-    /// land on a neighbour.
-    pub(in crate::lookout) fn adopt_dog_cursor(&mut self, name: &str) {
-        let Some(dog) = self.dogs_tab.rows.iter().position(|row| row.name() == name) else {
+    /// Puts the cursor back on `anchor`'s dog, if it is still listed. A
+    /// re-read can add a table above the cursor, and a cursor carried by
+    /// index would then land on a neighbour. Inside an open table the
+    /// cursor follows the table's own, which the table kept.
+    pub(in crate::lookout) fn restore_dog_anchor(&mut self, anchor: &DogAnchor) {
+        let Some(dog) = self
+            .dogs_tab
+            .rows
+            .iter()
+            .position(|row| row.name() == anchor.name)
+        else {
             return;
         };
         let rows = self.rows();
+        if !rows.contains(&PaneRow::Dog(dog)) {
+            return;
+        }
+        let row = &mut self.dogs_tab.rows[dog];
+        if anchor.inside
+            && row.open
+            && let Some(table) = row.table.as_deref_mut()
+        {
+            let len = table.rows().len();
+            table.view.clamp(len);
+            if len > 0 {
+                self.pull_focus(dog);
+                return;
+            }
+        }
         if let Some(at) = rows.iter().position(|row| *row == PaneRow::Dog(dog)) {
             self.view.move_to(at, rows.len());
         }
@@ -787,7 +833,7 @@ mod tests {
             listed("deploy", plain_schema(), true),
             listed("jobs", Some(jobs_schema()), true),
         ]);
-        assert_eq!(pane.cursor_dog_name().as_deref(), Some("deploy"));
+        assert_eq!(pane.dog_anchor().map(|a| a.name).as_deref(), Some("deploy"));
         assert!(!pane.dogs_tab_mut().arm_removal(0));
         assert_eq!(pane.dogs_tab().armed(), None);
         assert!(pane.dogs_tab_mut().arm_removal(2), "a read-only table too");
@@ -918,7 +964,8 @@ mod tests {
     fn a_refresh_keeps_the_cursor_on_its_dog() {
         let mut pane = listed_web();
         pane.move_by(1);
-        assert_eq!(pane.cursor_dog_name().as_deref(), Some("legacy"));
+        let anchor = pane.dog_anchor();
+        assert_eq!(anchor.as_ref().map(|a| a.name.as_str()), Some("legacy"));
         let mut more = tables();
         more.insert("alpha".into(), json!({ "on": true }));
         let mut fresh = web_on_dogs();
@@ -926,8 +973,11 @@ mod tests {
             .into_iter()
             .collect();
         fresh.adopt_dogs_tab(pane.dogs_tab().clone());
-        fresh.adopt_dog_cursor("legacy");
-        assert_eq!(fresh.cursor_dog_name().as_deref(), Some("legacy"));
+        fresh.restore_dog_anchor(&anchor.expect("on a dog"));
+        assert_eq!(
+            fresh.dog_anchor().map(|a| a.name).as_deref(),
+            Some("legacy")
+        );
     }
 
     /// A schema answer carries a dog's own defaults (IR-41).

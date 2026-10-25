@@ -743,6 +743,58 @@ mod tests {
         assert_eq!(table_edits(&app), 1, "the operator's edit survives");
     }
 
+    /// A table another writer added above `jobs` shifts every row. The
+    /// highlighted row and the row the table acts on must stay one row.
+    #[test]
+    fn a_re_read_that_shifts_the_rows_keeps_the_cursor_on_its_field() {
+        let mut app = app_in_jobs_table();
+        pane_to(&mut app, "token");
+        let _ = app.update(Msg::Key(KeyPress::Refresh));
+        let mut view = web_view(true);
+        let alpha = json!({ "on": true });
+        view.config.dogs.insert(
+            "alpha".into(),
+            alpha.as_object().cloned().expect("a table").into(),
+        );
+        let _ = app.update(Msg::Replied {
+            sent: Sent::SheepConfig { name: "web".into() },
+            result: Ok(Response::SheepConfig(Box::new(view))),
+        });
+        assert_eq!(dog_names(&app)[0], "alpha", "the new table sorts first");
+        let pane = app.config_pane().expect("a pane");
+        let Some(PaneRow::Under { dog, at }) = pane.cursor() else {
+            panic!("the cursor stays inside jobs's table: {:?}", pane.cursor());
+        };
+        let jobs = &pane.dogs_tab().rows()[dog];
+        assert_eq!(jobs.name(), "jobs");
+        let table = jobs.table().expect("built");
+        assert_eq!(table.view().cursor(), at, "the table acts on the shown row");
+        assert_eq!(
+            table.cursor_field().map(|field| field.key.as_str()),
+            Some("token")
+        );
+    }
+
+    /// The probe answer lands after the cursor moved to another dog; the
+    /// table it draws shifts the rows below it.
+    #[test]
+    fn a_probe_answer_after_the_cursor_moved_keeps_it_on_its_dog() {
+        let mut app = app_in_dogs(Control::Allowed);
+        cursor_on(&mut app, "jobs");
+        assert!(matches!(
+            app.update(Msg::Key(KeyPress::Confirm)),
+            Effect::LoadSheepDog { .. }
+        ));
+        let _ = app.update(Msg::Key(KeyPress::SelectDown));
+        assert_eq!(cursor_dog(&app), Some("legacy"));
+        let _ = app.update(Msg::SheepDog {
+            sheep: "web".into(),
+            entry: jobs_entry(),
+        });
+        assert!(row(&app, "jobs").is_open());
+        assert_eq!(cursor_dog(&app), Some("legacy"));
+    }
+
     #[test]
     fn a_re_read_of_another_sheep_leaves_the_open_table_alone() {
         let mut app = app_in_jobs_table();
