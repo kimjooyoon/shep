@@ -190,11 +190,8 @@ mod tests {
     fn esc_on_an_edited_table_pane_holds_it_until_the_re_read_answers() {
         let app = closing_jobs();
         let pane = app.config_pane().expect("the pane waits on the answer");
-        assert!(
-            matches!(pane.target(), PaneTarget::SheepDog { .. }),
-            "{pane:?}"
-        );
-        assert_eq!(pane.edits().len(), 1, "nothing has left the pane yet");
+        assert!(matches!(pane.target(), PaneTarget::Sheep { .. }), "{pane:?}");
+        assert_eq!(table_edits(&app), 1, "nothing has left the pane yet");
     }
 
     /// A second writer rotated `token` and added `retries` while the pane
@@ -206,11 +203,8 @@ mod tests {
         let moved = json!({ "concurrency": 2, "token": ROTATED, "retries": 5 });
         assert_eq!(answer_web(&mut app, web_with_jobs(&moved)), Effect::None);
         let pane = app.config_pane().expect("the pane stays up");
-        assert!(
-            matches!(pane.target(), PaneTarget::SheepDog { .. }),
-            "{pane:?}"
-        );
-        assert_eq!(pane.edits().len(), 1, "the edit rides the new table");
+        assert!(matches!(pane.target(), PaneTarget::Sheep { .. }), "{pane:?}");
+        assert_eq!(table_edits(&app), 1, "the edit rides the new table");
         let notice = app.notice().expect("the hold is said");
         assert!(notice.is_grave());
         assert_eq!(
@@ -236,7 +230,7 @@ mod tests {
     fn a_table_removed_while_the_pane_was_open_holds_it() {
         let mut app = closing_jobs();
         assert_eq!(answer_web(&mut app, web_view(false)), Effect::None);
-        assert_eq!(app.config_pane().expect("still up").edits().len(), 1);
+        assert_eq!(table_edits(&app), 1);
         let notice = app.notice().expect("the hold is said").to_string();
         assert!(notice.contains("nothing was written"), "{notice}");
 
@@ -257,7 +251,7 @@ mod tests {
             })),
         });
         assert_eq!(effect, Effect::None);
-        assert_eq!(app.config_pane().expect("still up").edits().len(), 1);
+        assert_eq!(table_edits(&app), 1);
         let notice = app.notice().expect("reported");
         assert!(notice.is_grave());
         assert_eq!(
@@ -277,7 +271,7 @@ mod tests {
             }),
         });
         assert_eq!(effect, Effect::None);
-        assert_eq!(app.config_pane().expect("still up").edits().len(), 1);
+        assert_eq!(table_edits(&app), 1);
         assert_eq!(
             app.notice().map(ToString::to_string).as_deref(),
             Some(
@@ -304,7 +298,7 @@ mod tests {
             Effect::Send(Sent::SheepConfig { name: "web".into() })
         );
         assert_eq!(answer_web(&mut app, web_view(true)), Effect::None);
-        assert_eq!(app.config_pane().expect("still up").edits().len(), 1);
+        assert_eq!(table_edits(&app), 1);
     }
 
     #[test]

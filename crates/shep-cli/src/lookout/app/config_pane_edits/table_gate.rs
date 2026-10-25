@@ -130,11 +130,8 @@ fn a_dog_section_holds_a_value_the_schema_refuses_and_still_writes_it() {
 #[test]
 fn a_sheep_dog_table_holds_a_value_the_schema_refuses_and_still_writes_it() {
     let mut app = app_in_web(Control::Allowed);
-    let ask = ask_dogs(&mut app, KeyPress::Confirm);
-    let _ = app.update(Msg::SheepDogs {
-        sheep: "web".into(),
-        ask,
-        dogs: vec![SheepDogEntry {
+    let ask = ask_dogs(&mut app);
+    answer(&mut app, "web", ask, vec![ListedDog { asked: true, entry: SheepDogEntry {
             name: "jobs".into(),
             adopted_path: Some("/opt/jobs".into()),
             schema: Some(json!({
@@ -145,8 +142,7 @@ fn a_sheep_dog_table_holds_a_value_the_schema_refuses_and_still_writes_it() {
                     "token": { "type": "string", "x-shep-secret": true },
                 },
             })),
-        }],
-    });
+        } }]);
     cursor_on(&mut app, "jobs");
     let _ = app.update(Msg::Key(KeyPress::Confirm));
     type_field(&mut app, "region", "eu-west-1");

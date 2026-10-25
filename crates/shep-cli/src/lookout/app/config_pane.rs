@@ -104,6 +104,8 @@ impl App {
             .config_pane()
             .filter(|pane| matches!(pane.target(), PaneTarget::Sheep { .. }))
             .map(|pane| pane.dogs_tab().clone());
+        // A dog's row is carried by name: a re-read can list a table above it.
+        let carried_dog = self.config_pane().and_then(ConfigPane::cursor_dog_name);
         // The pending set survives the rebuild: the values are
         // the shepherd's and the edits are the operator's. An open
         // editor is dropped. See `ConfigPane::adopt_edits`.
@@ -121,6 +123,9 @@ impl App {
         }
         if let Some(carried) = carried {
             pane.adopt_view(carried);
+        }
+        if let Some(dog) = carried_dog {
+            pane.adopt_dog_cursor(&dog);
         }
         if let Some(env_key) = carried_env_key {
             pane.adopt_env_cursor(env_key.as_deref());

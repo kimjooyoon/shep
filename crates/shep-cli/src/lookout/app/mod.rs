@@ -561,9 +561,9 @@ mod tests {
                 KeyPress::Edit,
             ),
             (
-                "a sheep's dog list",
+                "a sheep's dogs tab",
                 app_in_web(Control::Allowed),
-                KeyPress::Confirm,
+                KeyPress::Group(9),
             ),
             (
                 "a dog toggle",
