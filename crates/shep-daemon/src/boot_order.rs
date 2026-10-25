@@ -10,6 +10,7 @@
 use core::time::Duration;
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::ffi::OsStr;
 
 use shep_core::config::ResolvedApp;
 use shep_core::config::graph::{BootNode, BootPlan, NodeKind};
@@ -128,6 +129,12 @@ pub(crate) fn nodes_for_with_dogs(
 /// `snapshot::warn_about_the_graph` reports the edge.
 /// Answers with every instance started, in stage order.
 ///
+/// `notify_socket` is the boot restore's own `$NOTIFY_SOCKET`; every other
+/// walk passes `None`. With one, each stage announces its `bound` to it just
+/// before it starts, so a unit's `TimeoutStartSec` follows the walk instead of
+/// having to cover the sum of the stages. A stage nothing waits on announces
+/// too, since its spawns take time.
+///
 /// **An [`BatchPolicy::AllOrNothing`] batch that fails here leaves a PARTIAL
 /// flock.** That policy refuses one `Command::Start` before it registers
 /// anything, and while `shep start` was one such call the refusal really did
@@ -156,6 +163,7 @@ pub(crate) async fn start_in_stages(
     supervisor: &SupervisorHandle,
     events: &Bus,
     policy: BatchPolicy,
+    notify_socket: Option<&OsStr>,
 ) -> Result<Vec<ProcessInfo>, SupervisorError> {
     // Every name anything in the flock waits on, read once. That is usually
     // "what follows them", since the sort puts a dependency in an earlier
@@ -215,6 +223,7 @@ pub(crate) async fn start_in_stages(
         // subscribing `spawn_dog_watch` ahead of the supervisor.
         let rx = events.subscribe();
         tracing::info!(stage = index, members = ?stage, "boot stage starting");
+        extend_start_deadline(notify_socket, bound, index);
         match supervisor.start_staged(members, gate, policy).await {
             Ok(infos) => started.extend(infos),
             Err(err) if policy == BatchPolicy::AllOrNothing => {
@@ -237,6 +246,27 @@ pub(crate) async fn start_in_stages(
         }
     }
     Ok(started)
+}
+
+/// Tells the init system at `notify_socket`, if any, to hold its start
+/// deadline for `bound` more.
+///
+/// A failed send is a `warn!`: the stage starts regardless, and only the init
+/// system's deadline is then the one it had. Nothing is sent off unix, where
+/// there is no `$NOTIFY_SOCKET`.
+fn extend_start_deadline(notify_socket: Option<&OsStr>, bound: Duration, stage: usize) {
+    #[cfg(unix)]
+    if let Some(target) = notify_socket
+        && let Err(err) = crate::notify::extend_timeout(target, bound)
+    {
+        tracing::warn!(
+            stage,
+            %err,
+            "the start deadline could not be extended through $NOTIFY_SOCKET; the stage starts regardless"
+        );
+    }
+    #[cfg(not(unix))]
+    let _ = (notify_socket, bound, stage);
 }
 
 /// What this start left running: every earlier stage, plus whatever of the

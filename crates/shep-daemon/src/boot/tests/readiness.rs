@@ -9,6 +9,7 @@ use crate::boot::*;
 use crate::fake::{ProcScript, ScriptedRunner};
 use crate::testing::{AnnouncingRunner, test_paths};
 use shep_core::config::AppConfig;
+use shep_core::values::UpDuration;
 use std::time::Duration;
 
 use super::seed_roll;
@@ -101,6 +102,10 @@ async fn readiness_is_reported_only_once_the_roll_is_restored() {
     .unwrap();
 
     let mut buf = [0u8; 64];
+    // The stage's own deadline extension, which `each_restored_stage_extends…`
+    // owns; it is queued ahead of the spawn it announces.
+    let read = listener.recv(&mut buf).unwrap();
+    assert!(buf[..read].starts_with(b"EXTEND_TIMEOUT_USEC="));
     let read = listener.recv(&mut buf).unwrap();
     assert_eq!(
         &buf[..read],
@@ -118,6 +123,74 @@ async fn readiness_is_reported_only_once_the_roll_is_restored() {
     assert_eq!(flock[0].name, "web");
 
     ctx.shutdown();
+    daemon.run().await.unwrap();
+}
+
+/// The deadline systemd holds a `Type=notify` unit to is one number, and a
+/// staged restore spends it a stage at a time. Each stage announces the most
+/// the walk will wait on it, so the deadline follows the walk instead of the
+/// operator's guess at its depth.
+///
+/// Different `listen_timeout`s, so a bound that was a constant, or the first
+/// stage's repeated, would not pass.
+#[tokio::test]
+async fn each_restored_stage_extends_the_start_deadline_before_readiness() {
+    // Real time: binds a real socket, so this obeys SIGNAL_TEST_LOCK's
+    // rule like every other successful `boot()` in this module.
+    let _guard = SIGNAL_TEST_LOCK.lock().await;
+    let dir = tempfile::tempdir().unwrap();
+    let paths = test_paths(&dir);
+    let mut db = AppConfig::minimal("db", "./srv");
+    db.listen_timeout = UpDuration::from_millis(30_000);
+    let mut api = AppConfig::minimal("api", "./srv");
+    api.listen_timeout = UpDuration::from_millis(7_000);
+    api.depends_on = vec!["db".to_string()];
+    seed_roll(&paths, vec![db, api]);
+
+    let notify_path = dir.path().join("n.sock");
+    let listener = std::os::unix::net::UnixDatagram::bind(&notify_path).unwrap();
+    // Bounded, for the reason the case above gives.
+    listener
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+
+    let daemon = boot_with_idle_sweep(
+        ScriptedRunner::new(vec![ProcScript::never_exits(), ProcScript::never_exits()]),
+        paths,
+        BootOptions {
+            restore: true,
+            notify_socket: Some(notify_path.clone().into_os_string()),
+            ..BootOptions::default()
+        },
+    )
+    .await
+    .unwrap();
+
+    // Read to `READY=1`, which is sent last: whatever is queued behind it
+    // arrived after it.
+    let mut messages = Vec::new();
+    let mut buf = [0u8; 64];
+    loop {
+        let read = listener.recv(&mut buf).unwrap();
+        let message = String::from_utf8(buf[..read].to_vec()).unwrap();
+        let ready = message == "READY=1\n";
+        messages.push(message);
+        if ready {
+            break;
+        }
+    }
+    assert_eq!(
+        messages,
+        vec![
+            // 30s + the 5s stage slack, in microseconds.
+            "EXTEND_TIMEOUT_USEC=35000000\n",
+            // 7s + the 5s stage slack.
+            "EXTEND_TIMEOUT_USEC=12000000\n",
+            "READY=1\n",
+        ]
+    );
+
+    daemon.context().shutdown();
     daemon.run().await.unwrap();
 }
 
