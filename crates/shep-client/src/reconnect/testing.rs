@@ -96,9 +96,18 @@ pub(super) async fn subscribe_then_lose_it(client: &ReconnectingClient, shepherd
 /// Waits until `client`'s link reaches a refusal, or fails inside
 /// [`BOUND`].
 pub(super) async fn await_refusal(client: &ReconnectingClient) -> LinkState {
-    let refused = wait_until(BOUND, || matches!(client.link(), LinkState::Refused { .. })).await;
+    let mut refusal = None;
+    let refused = wait_until(BOUND, || {
+        let link = client.link();
+        let is_refusal = matches!(link, LinkState::Refused { .. });
+        if is_refusal {
+            refusal = Some(link);
+        }
+        is_refusal
+    })
+    .await;
     assert!(refused, "the link never reached a refusal within {BOUND:?}");
-    client.link()
+    refusal.expect("a held condition recorded the refusal it saw")
 }
 
 /// Reconnects `client` inside [`BOUND`], failing the test rather than
