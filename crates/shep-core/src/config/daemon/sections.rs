@@ -196,7 +196,7 @@ pub struct SecretsSection {
 pub struct StyleSection {
     /// `full`, `plain` or `bare`. Absent means the CLI decides.
     #[cfg_attr(feature = "schema", schemars(
-        extend("x-shep-apply" = "next-command", "enum" = ["full", "plain", "bare", null])
+        extend("x-shep-apply" = "next-command", "enum" = ["full", "plain", "bare"])
     ))]
     pub level: Option<String>,
 }
