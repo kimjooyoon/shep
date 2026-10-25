@@ -104,7 +104,13 @@ mod tests {
         assert!(matches!(kind("daemon.log_level"), FieldKind::Choice(_)));
         assert!(matches!(kind("style.level"), FieldKind::Choice(_)));
         assert_eq!(kind("interpreters"), FieldKind::Map);
-        assert!(shep_toml_shape().fields.by_key("interpreters").unwrap().editable);
+        assert!(
+            shep_toml_shape()
+                .fields
+                .by_key("interpreters")
+                .unwrap()
+                .editable
+        );
     }
 
     #[test]
@@ -121,7 +127,14 @@ mod tests {
             .collect();
         assert_eq!(
             roots,
-            ["daemon", "whistle", "secrets", "style", "interpreters", "hosts"]
+            [
+                "daemon",
+                "whistle",
+                "secrets",
+                "style",
+                "interpreters",
+                "hosts"
+            ]
         );
     }
 

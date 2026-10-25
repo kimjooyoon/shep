@@ -119,7 +119,8 @@ impl Default for DaemonSection {
 /// detail firing per dropped restart and per child metric sample, a
 /// firehose on a busy flock.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+// Serialize only so the schema can print `warn` as the field's default.
+#[cfg_attr(feature = "schema", derive(serde::Serialize, schemars::JsonSchema))]
 #[serde(rename_all = "lowercase")]
 pub enum LogLevel {
     /// Nothing at all: the daemon writes no records of its own.

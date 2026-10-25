@@ -185,7 +185,7 @@ mod tests {
 
     #[test]
     fn a_scalar_still_edits_while_the_link_is_gone() {
-        let mut app = fixtures::app_in_settings_with_control(); // on log_level
+        let mut app = fixtures::app_in_settings_on("daemon.log_level");
         let _ = app.update(Msg::Frozen {
             at_local: "12:00:00".into(),
             why: fixtures::FROZEN_WHY.to_string(),

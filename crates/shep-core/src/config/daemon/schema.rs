@@ -110,4 +110,13 @@ mod tests {
         assert_eq!(daemon["environment"]["default"], "production");
         assert_eq!(daemon["log_json"]["default"], false);
     }
+
+    #[test]
+    fn a_closed_set_field_names_its_default() {
+        let schema = schema();
+        assert_eq!(
+            section(&schema, "daemon")["properties"]["log_level"]["default"],
+            "warn"
+        );
+    }
 }
