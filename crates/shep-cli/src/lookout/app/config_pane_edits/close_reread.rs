@@ -254,15 +254,12 @@ mod tests {
             "the tables are read before the dialog asks"
         );
         assert!(
-            !app.close_dialog().is_some(),
+            app.close_dialog().is_none(),
             "no question while the read is out"
         );
         let moved = json!({ "concurrency": 2, "token": ROTATED });
         assert_eq!(answer_web(&mut app, web_with_jobs(&moved)), Effect::None);
-        assert!(
-            !app.close_dialog().is_some(),
-            "a moved table holds the pane"
-        );
+        assert!(app.close_dialog().is_none(), "a moved table holds the pane");
         assert!(
             app.notice()
                 .is_some_and(|notice| notice.to_string().contains("nothing was written"))
