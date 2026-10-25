@@ -143,8 +143,8 @@ pub fn set(path: &Path, key: &str, environment: &str, value: &str) -> Result<(),
 ///
 /// Each pair replaces any previous value in its slot and every other
 /// environment is left alone. A key repeated in `entries` keeps its last
-/// value. An empty `entries` returns without opening, locking or creating
-/// the store.
+/// value. An empty `entries` returns `Ok(())` before anything else, the
+/// environment name included, and never opens, locks or creates the store.
 ///
 /// # Errors
 ///
@@ -163,13 +163,13 @@ pub fn set_many(
     environment: &str,
     entries: &[(&str, &str)],
 ) -> Result<(), SecretError> {
+    if entries.is_empty() {
+        return Ok(());
+    }
     check_name(environment, SecretError::InvalidEnvironment)?;
     for &(key, value) in entries {
         check_name(key, SecretError::InvalidKey)?;
         check_value(key, value)?;
-    }
-    if entries.is_empty() {
-        return Ok(());
     }
 
     let _lock = FileLock::acquire(path)?;
@@ -421,6 +421,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("secrets.json");
         set_many(&path, "production", &[]).unwrap();
+        set_many(&path, "bad env", &[]).unwrap();
         assert!(!path.exists());
         assert!(!dir.path().join("secrets.json.lock").exists());
     }
