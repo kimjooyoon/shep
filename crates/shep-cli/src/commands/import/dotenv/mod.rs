@@ -133,7 +133,9 @@ pub async fn import_env(
         .filter(|planned| planned.class == Class::Secret)
         .map(|planned| (planned.key.as_str(), planned.value.as_str()))
         .collect();
-    // One locked write, so a failure here means nothing was written.
+    // One locked write, so a refusal or a failed stage leaves the store as it
+    // was. Only a failed directory flush after the rename can leave it
+    // written, and `set` has the same gap.
     if let Err(err) = secrets::set_many(&paths.secrets, &environment, &secret_entries) {
         return streams.fail(exit_code_for(&err), &err.to_string());
     }

@@ -156,8 +156,11 @@ pub fn set(path: &Path, key: &str, environment: &str, value: &str) -> Result<(),
 ///   [`SecretError::Io`] exactly as [`set`] returns them.
 ///
 /// The first three are checked for every entry before the lock is taken, so
-/// a refused batch never creates the store. Whatever fails, nothing is
-/// written.
+/// a refused batch never creates the store. The store is replaced by one
+/// rename, so a batch refused before it, or failing to stage or `fsync` the
+/// temp file, leaves the old store whole. An `Io` error from the directory
+/// flush that follows the rename can arrive after the whole batch is already
+/// in place, exactly as it can for [`set`].
 pub fn set_many(
     path: &Path,
     environment: &str,
