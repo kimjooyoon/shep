@@ -118,73 +118,40 @@ fn draw_body(app: &App, frame: &mut Frame<'_>) {
     // whichever body that pane already is. The keymap overlay came second
     // and is general: `draw` draws it after this function returns, over
     // whichever of the six bodies drew, so nothing here has to remember.
-    match app.body() {
+    let body = Rect {
+        x: area.x,
+        y,
+        width,
+        height: body_rows(area),
+    };
+    let swapped = match app.body() {
         Body::ConfigPane(pane) => {
-            let body = Rect {
-                x: area.x,
-                y,
-                width,
-                height: body_rows(area),
-            };
             super::pane::draw_pane(app, pane, body, buffer);
-            buffer.set_line(
-                area.x,
-                bottom,
-                &super::status::status_line(app, width),
-                width,
-            );
-            return;
+            true
         }
         Body::Settings(settings) => {
-            let body = Rect {
-                x: area.x,
-                y,
-                width,
-                height: body_rows(area),
-            };
             super::settings::draw_settings(app, settings, body, buffer);
-            buffer.set_line(
-                area.x,
-                bottom,
-                &super::status::status_line(app, width),
-                width,
-            );
-            return;
+            true
         }
         Body::Bleats(pane) => {
-            let body = Rect {
-                x: area.x,
-                y,
-                width,
-                height: body_rows(area),
-            };
             super::bleats_full::draw(app, pane, body, buffer);
-            buffer.set_line(
-                area.x,
-                bottom,
-                &super::status::status_line(app, width),
-                width,
-            );
-            return;
+            true
         }
         Body::Secrets(pane) => {
-            let body = Rect {
-                x: area.x,
-                y,
-                width,
-                height: body_rows(area),
-            };
             super::secrets::draw(app, pane, body, buffer);
-            buffer.set_line(
-                area.x,
-                bottom,
-                &super::status::status_line(app, width),
-                width,
-            );
-            return;
+            true
         }
         Body::Sheep(_) => unreachable!("handled above, ahead of the roomy blank row"),
-        Body::FlockTable => {}
+        Body::FlockTable => false,
+    };
+    if swapped {
+        buffer.set_line(
+            area.x,
+            bottom,
+            &super::status::status_line(app, width),
+            width,
+        );
+        return;
     }
 
     if let Some(banner) = super::status::banner_line(app, width) {

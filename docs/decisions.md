@@ -1199,7 +1199,7 @@ Scaling down takes the highest slot numbers, not the lowest, because instance_sl
 
 AppConfig::stdin defaults to false; without it, sendline answers a per-row `no_stdin` refusal.
 
-**Why:** Piping stdin to every spawned sheep unconditionally would change behavior for processes nobody asked to change (today every sheep gets Stdio::null()), and many programs detect a closed/null stdin as their signal to run non-interactively (no prompt, no colour, no readline) - `less` and `git` are named examples. It also costs a descriptor and a task per sheep for the process's whole life, against the project's single-digit-MB idle-RSS budget.
+**Why:** Piping stdin to every spawned sheep unconditionally would change behavior for processes nobody asked to change (today every sheep gets Stdio::null()), and many programs detect a closed/null stdin as their signal to run non-interactively (no prompt, no colour, no readline) - `less` and `git` are named examples. It also costs a descriptor and a task per sheep for the process's whole life.
 
 `docs/writing-plans/plans/2026-08-13-shep-phase11-verbs.md:324`
 
@@ -1207,7 +1207,7 @@ AppConfig::stdin defaults to false; without it, sendline answers a per-row `no_s
 
 A new stdin: bool field, default false, gates whether a sheep's stdin is piped at spawn time at all. Without it, sendline reports no_stdin naming the field, mirroring channel's no_channel treatment.
 
-**Why:** Three reasons, weighted: piping unconditionally would change every spawn on the system (today every sheep gets Stdio::null()); many programs (less, git, a Node app checking process.stdin.isTTY) detect a piped stdin and silently switch into non-interactive mode nobody asked for; and it costs a descriptor plus a task per sheep for the process's whole life, against the project's single-digit-MB idle-RSS budget - the same budget that motivated channel's own opt-in default.
+**Why:** Three reasons, weighted: piping unconditionally would change every spawn on the system (today every sheep gets Stdio::null()); many programs (less, git, a Node app checking process.stdin.isTTY) detect a piped stdin and silently switch into non-interactive mode nobody asked for; and it costs a descriptor plus a task per sheep for the process's whole life - the same cost that motivated channel's own opt-in default.
 
 `docs/writing-plans/plans/2026-08-13-shep-phase11-verbs.md:324-347; confirmed at crates/shep-core/src/config/app.rs:353`
 
