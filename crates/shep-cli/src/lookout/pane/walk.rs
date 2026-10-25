@@ -62,8 +62,8 @@ impl ConfigPane {
         }
     }
 
-    /// One row per field of the active group, in display order, then this
-    /// sheep's own env keys and the row that adds one. A field carrying no
+    /// One row per field of the active group, in display order, then, on a
+    /// sheep's `process` tab, its own env keys and the row that adds one. A field carrying no
     /// group at all (every field on a dog pane, whose schema declares
     /// none) is visible regardless of which group is active, which is
     /// what keeps a dog's flat list undisturbed by a control meant for a
@@ -96,11 +96,18 @@ impl ConfigPane {
             .filter(|(_, field)| field.group.as_deref().is_none_or(|g| g == group))
             .map(|(index, _)| PaneRow::Field(index))
             .collect();
-        if is_sheep {
+        if self.shows_env() {
             rows.extend((0..self.env_keys.len()).map(PaneRow::Env));
             rows.push(PaneRow::AddEnv);
         }
         rows
+    }
+
+    /// Whether the env rows and the row that adds one belong to the tab the
+    /// pane is on: a sheep's `process` tab, and no other.
+    #[must_use]
+    pub fn shows_env(&self) -> bool {
+        matches!(self.target, PaneTarget::Sheep { .. }) && self.group() == GROUP_ORDER[0]
     }
 
     /// [`Self::rows`]'s own [`PaneRow::Field`] and [`PaneRow::Table`] entries, alone: what the
@@ -223,6 +230,26 @@ mod tests {
         );
         pane.move_to_first();
         assert_eq!(pane.cursor(), Some(PaneRow::Field(0)));
+    }
+
+    #[test]
+    fn the_cursor_reaches_an_env_row_from_the_process_tab_and_no_other() {
+        let mut pane = ConfigPane::sheep(web());
+        for digit in 1..=9 {
+            pane.set_group(digit);
+            let on_env = |row: &PaneRow| matches!(row, PaneRow::Env(_) | PaneRow::AddEnv);
+            assert_eq!(
+                pane.rows().iter().any(on_env),
+                digit == 1,
+                "tab {digit} lists env rows"
+            );
+            pane.move_to_last();
+            assert_eq!(
+                pane.cursor().as_ref().is_some_and(on_env),
+                digit == 1,
+                "tab {digit}: the last row"
+            );
+        }
     }
 
     #[test]

@@ -342,6 +342,18 @@ mod tests {
         assert!(!text.iter().any(|line| line.contains("below")), "{text:?}");
     }
 
+    #[test]
+    fn the_env_rows_draw_on_the_process_tab_and_on_no_other() {
+        let mut pane = web_pane();
+        for digit in 1..=9 {
+            pane.set_group(digit);
+            let text = text_of(&pane_lines(&pane, fixtures::plain(), 160, 0)).join("\n");
+            for needle in ["DB_HOST", "LOG_LEVEL", "+ add a key"] {
+                assert_eq!(text.contains(needle), digit == 1, "tab {digit}, {needle}:\n{text}");
+            }
+        }
+    }
+
     /// Guards against the class of bug where chrome eats the budget and
     /// the selected row is never drawn, while every static frame still
     /// looks right. Six is `view::MIN_HEIGHT`; three lines of body under
