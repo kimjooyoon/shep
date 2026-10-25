@@ -114,6 +114,10 @@ async fn readiness_is_reported_only_once_the_roll_is_restored() {
              green at exec time reports a flock that is not up yet, and a \
              restore that hangs reads as a healthy service supervising nothing"
     );
+    // The extension for the setup after the restore, likewise owned by the
+    // case below.
+    let read = listener.recv(&mut buf).unwrap();
+    assert!(buf[..read].starts_with(b"EXTEND_TIMEOUT_USEC="));
     let read = listener.recv(&mut buf).unwrap();
     assert_eq!(&buf[..read], b"READY=1\n");
 
@@ -130,6 +134,10 @@ async fn readiness_is_reported_only_once_the_roll_is_restored() {
 /// staged restore spends it a stage at a time. Each stage announces the most
 /// the walk will wait on it, so the deadline follows the walk instead of the
 /// operator's guess at its depth.
+///
+/// A stage that is waited on announces twice, because each message sets a
+/// fresh deadline from its receipt: once before its spawns, once before its
+/// wait. The restore ends with one more for the setup before `READY=1`.
 ///
 /// Different `listen_timeout`s, so a bound that was a constant, or the first
 /// stage's repeated, would not pass.
@@ -182,10 +190,14 @@ async fn each_restored_stage_extends_the_start_deadline_before_readiness() {
     assert_eq!(
         messages,
         vec![
-            // 30s + the 5s stage slack, in microseconds.
+            // `db`, which `api` waits on: 30s + the 5s stage slack, in
+            // microseconds, before its spawns and again before its wait.
             "EXTEND_TIMEOUT_USEC=35000000\n",
-            // 7s + the 5s stage slack.
+            "EXTEND_TIMEOUT_USEC=35000000\n",
+            // `api`, which nothing waits on: 7s + the 5s stage slack, once.
             "EXTEND_TIMEOUT_USEC=12000000\n",
+            // The setup after the restore: the stage slack alone.
+            "EXTEND_TIMEOUT_USEC=5000000\n",
             "READY=1\n",
         ]
     );

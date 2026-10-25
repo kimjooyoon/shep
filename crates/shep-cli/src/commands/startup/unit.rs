@@ -37,7 +37,7 @@ pub(crate) struct UnitSpec {
 /// No `TimeoutStartSec`, so systemd's own default applies, 90s on a stock
 /// installation. Readiness is reported after the restore, and the restore
 /// walks the muster roll in dependency order, holding each stage until its
-/// members are ready. The shepherd sends `EXTEND_TIMEOUT_USEC` before each
+/// members are ready. The shepherd sends `EXTEND_TIMEOUT_USEC` around each
 /// stage, set to that stage's own bound, so the deadline follows the walk and
 /// no number here has to cover the sum of the stages. systemd only moves a
 /// deadline later, so a `TimeoutStartSec` the operator sets higher is never

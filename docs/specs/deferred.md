@@ -809,8 +809,11 @@ built on this branch.
 Tracked as https://github.com/shep-pm/shep/issues/359.
 
 Built: the boot restore sends `EXTEND_TIMEOUT_USEC=<n>` before each stage, with
-`n` that stage's bound (its longest `listen_timeout` plus `STAGE_SLACK`).
-`shep start` and `Muster` send nothing. A single stage that overruns its own
+`n` that stage's bound (its longest `listen_timeout` plus `STAGE_SLACK`), and
+again once the spawns return for a stage something waits on, since each
+message sets a fresh deadline from its receipt and the wait starts after the
+spawns. One more of `STAGE_SLACK` follows the restore, before the setup ahead
+of `READY=1`. `shep start` and `Muster` send nothing. A single stage that overruns its own
 bound still lets systemd kill the shepherd.
 
 ### ~~A promoted dog cannot handshake during the restore~~ -- done, 2026-10-23

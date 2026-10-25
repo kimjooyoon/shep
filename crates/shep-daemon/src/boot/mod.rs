@@ -441,6 +441,12 @@ pub(crate) async fn boot_with_sweep<R: ProcessRunner>(
             options.notify_socket.as_deref(),
         )
         .await?;
+        // The last stage's extension may be spent by now, and the setup below
+        // still runs before `READY=1`.
+        crate::boot_order::extend_start_deadline(
+            options.notify_socket.as_deref(),
+            crate::boot_order::STAGE_SLACK,
+        );
     }
 
     // After the restore, so no saved sheep's id moves, and before the enabled
@@ -486,8 +492,10 @@ pub(crate) async fn boot_with_sweep<R: ProcessRunner>(
     //    Reported here, after the restore, which is the honest answer to
     //    `Type=notify`. The restore holds each stage until its members are
     //    ready, so it can outlast `TimeoutStartSec`; `restore_flock` has each
-    //    stage extend that deadline by its own bound before it starts, so the
-    //    unit is killed only by a stage that overruns its own.
+    //    stage extend that deadline by its own bound, before its spawns and
+    //    again before its wait, and the restore extends it once more for the
+    //    setup that follows. The unit is killed only by a stage that overruns
+    //    its own bound.
     #[cfg(unix)]
     if let Some(target) = options.notify_socket.as_deref()
         && let Err(err) = crate::notify::notify(target)

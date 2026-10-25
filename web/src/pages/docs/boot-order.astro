@@ -284,7 +284,9 @@ error[invalid_config]: the daemon reported InvalidConfig: dependency cycle: api 
       the sum of the stages. Before each stage the shepherd sends systemd{" "}
       <code>EXTEND_TIMEOUT_USEC</code>, set to that stage's longest{" "}
       <code>listen_timeout</code> plus five seconds, which is the most the
-      restore waits on it. The deadline follows the walk, so a deep flock
+      restore waits on it. It sends it again once the stage's spawns return,
+      when the wait starts, and once more for five seconds after the last
+      stage, for the setup before readiness. The deadline follows the walk, so a deep flock
       needs no <code>TimeoutStartSec</code> of its own. systemd only moves a
       deadline later, so one you set higher stays. Only a single stage that
       overruns its own bound lets systemd kill the shepherd and start it
