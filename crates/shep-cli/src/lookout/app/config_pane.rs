@@ -123,7 +123,7 @@ impl App {
         if let Some(dogs) = carried_dogs {
             pane.adopt_dogs(&dogs);
         }
-        self.body = Body::ConfigPane(pane);
+        self.body = Body::ConfigPane(Box::new(pane));
         // The rebuilt pane carries no editor, so the keyboard must not
         // still think one is open.
         self.release_text_mode_if_unowned();

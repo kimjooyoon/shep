@@ -76,7 +76,7 @@ impl App {
     /// `space` on a [`SettingsRow::Dog`] row: arms the opposite of the file's
     /// `enabled` bit, refusing in [`LINK_GONE`]'s words while the link is gone.
     ///
-    /// The link check is this row's own, unlike [`Self::cycle_scalar`]: a
+    /// The link check is this row's own, unlike [`Self::cycle_key`]: a
     /// confirmed toggle ends in a request to the shepherd. Replaces a
     /// [`Pending::Sent`] for that method's reason.
     pub(super) fn cycle_dog(&mut self, index: usize) -> Effect {

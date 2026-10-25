@@ -174,7 +174,7 @@ impl App {
         }
         let opened =
             ConfigPane::sheep_dog(sheep.clone(), dog.clone(), &schema, pane.sheep_table(&dog));
-        self.body = Body::ConfigPane(opened);
+        self.body = Body::ConfigPane(Box::new(opened));
         self.release_text_mode_if_unowned();
         Effect::None
     }

@@ -132,7 +132,7 @@ pub(crate) enum Body {
     Settings(Settings),
     /// An open config pane, for a sheep or a dog, opened by
     /// [`KeyPress::Edit`].
-    ConfigPane(ConfigPane),
+    ConfigPane(Box<ConfigPane>),
     /// The bleats feed given the whole screen, opened by
     /// [`KeyPress::Bleats`].
     Bleats(BleatsPane),

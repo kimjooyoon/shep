@@ -20,7 +20,9 @@ pub use bounds::Bounds;
 pub(crate) use flatten::{
     Child, Flattened, Outline, flatten_values, flattened, flattened_with_maps, segment,
 };
-pub(crate) use shep_toml::{PER_DOG_KEYS, shep_toml_shape};
+#[cfg(test)]
+pub(crate) use shep_toml::PER_DOG_KEYS;
+pub(crate) use shep_toml::shep_toml_shape;
 pub(crate) use union::KEY_SEP;
 pub use union::Union;
 
