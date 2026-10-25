@@ -83,29 +83,9 @@ pub(super) fn draw_charts(
     palette: Palette,
 ) {
     let body_cells = chart_body_cells(area.width);
-    let cpu_history = app.cpu_history(sheep_id);
     let rss_history = app.rss_history(sheep_id);
 
-    let cpu_header = cpu_header_text(cpu_history.len(), body_cells);
-    write_row(
-        buffer,
-        area,
-        CPU_HEADER_ROW,
-        &format!("\u{2588}\u{2588} CPU   {cpu_header}"),
-        palette.muted(),
-    );
-    for (i, row_text) in cpu_chart_rows(cpu_history, body_cells)
-        .into_iter()
-        .enumerate()
-    {
-        write_row(
-            buffer,
-            area,
-            CPU_CHART_ROW + i as u16,
-            &row_text,
-            Style::default(),
-        );
-    }
+    draw_cpu_block(app, sheep_id, body_cells, area, buffer, palette);
 
     let mem_window = &rss_history[rss_history.len().saturating_sub(body_cells)..];
     let mem_window_peak = mem_window.iter().copied().max().unwrap_or(0);
@@ -150,9 +130,38 @@ pub(super) fn draw_cpu_only(
     palette: Palette,
 ) {
     let body_cells = chart_body_cells(area.width);
-    let cpu_history = app.cpu_history(sheep_id);
     let rss_history = app.rss_history(sheep_id);
 
+    draw_cpu_block(app, sheep_id, body_cells, area, buffer, palette);
+
+    let current_rss = rss_history.last().copied().unwrap_or(0);
+    write_row(
+        buffer,
+        area,
+        MEM_HEADER_ROW,
+        &mem_line_text(current_rss, max_memory),
+        Style::default(),
+    );
+    write_row(
+        buffer,
+        area,
+        AXIS_ROW,
+        &axis_row(body_cells),
+        palette.muted(),
+    );
+}
+
+/// The CPU header and chart rows, the half both tiers that draw a CPU
+/// chart open with.
+fn draw_cpu_block(
+    app: &App,
+    sheep_id: u32,
+    body_cells: usize,
+    area: Rect,
+    buffer: &mut Buffer,
+    palette: Palette,
+) {
+    let cpu_history = app.cpu_history(sheep_id);
     let cpu_header = cpu_header_text(cpu_history.len(), body_cells);
     write_row(
         buffer,
@@ -173,22 +182,6 @@ pub(super) fn draw_cpu_only(
             Style::default(),
         );
     }
-
-    let current_rss = rss_history.last().copied().unwrap_or(0);
-    write_row(
-        buffer,
-        area,
-        MEM_HEADER_ROW,
-        &mem_line_text(current_rss, max_memory),
-        Style::default(),
-    );
-    write_row(
-        buffer,
-        area,
-        AXIS_ROW,
-        &axis_row(body_cells),
-        palette.muted(),
-    );
 }
 
 /// [`ChartTier::CpuOnly`]'s own memory line: `rss` against its ceiling
