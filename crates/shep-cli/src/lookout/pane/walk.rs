@@ -76,6 +76,9 @@ impl ConfigPane {
     /// dog's schema is somebody else's and can declare a field named
     /// `env` of its own, which stays.
     ///
+    /// A sheep's `dogs` tab draws no field at all: its rows are the dogs,
+    /// and the table of each one that is open. See [`Self::dog_rows`].
+    ///
     /// A dog's pane draws its outline instead: a table's row, then what is
     /// under it while it is open. See [`Self::open_table`].
     #[must_use]
@@ -87,6 +90,9 @@ impl ConfigPane {
         }
         let group = self.group();
         let is_sheep = matches!(self.target, PaneTarget::Sheep { .. });
+        if self.shows_dogs() {
+            return self.dog_rows();
+        }
         let mut rows: Vec<PaneRow> = self
             .fields
             .fields()
@@ -143,16 +149,19 @@ impl ConfigPane {
     pub(in crate::lookout) fn move_by(&mut self, delta: isize) {
         let len = self.rows().len();
         self.view.move_by(delta, len);
+        self.push_focus();
     }
 
     pub(in crate::lookout) fn move_to_first(&mut self) {
         let len = self.rows().len();
         self.view.move_to(0, len);
+        self.push_focus();
     }
 
     pub(in crate::lookout) fn move_to_last(&mut self) {
         let len = self.rows().len();
         self.view.move_to(len.saturating_sub(1), len);
+        self.push_focus();
     }
 
     /// Adopts a previous pane's cursor and offset, clamped to this one's
@@ -162,6 +171,18 @@ impl ConfigPane {
         self.view = view;
         let len = self.rows().len();
         self.view.clamp(len);
+    }
+
+    /// Lands on the `index`th group, as carried from a pane this one replaces.
+    pub(in crate::lookout) fn adopt_group(&mut self, index: usize) {
+        if index < GROUP_ORDER.len() {
+            self.group = index;
+        }
+    }
+
+    /// The active group's position in [`GROUP_ORDER`].
+    pub(in crate::lookout) fn group_index(&self) -> usize {
+        self.group
     }
 
     /// Switches to `key`'s own group, then walks the cursor onto it, the
@@ -197,7 +218,9 @@ impl ConfigPane {
             | PaneRow::Choice { .. }
             | PaneRow::Arm { .. }
             | PaneRow::Env(_)
-            | PaneRow::AddEnv => false,
+            | PaneRow::AddEnv
+            | PaneRow::Dog(_)
+            | PaneRow::Under { .. } => false,
         }) {
             let len = self.rows().len();
             self.view.move_to(row_index, len);

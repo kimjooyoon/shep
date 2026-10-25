@@ -125,7 +125,9 @@ pub(super) fn cursor_env_row_line(
             | PaneRow::Table(_)
             | PaneRow::Entry(_)
             | PaneRow::Choice { .. }
-            | PaneRow::Arm { .. },
+            | PaneRow::Arm { .. }
+            | PaneRow::Dog(_)
+            | PaneRow::Under { .. },
         )
         | None => {
             unreachable!("callers check the cursor is on an env row first")

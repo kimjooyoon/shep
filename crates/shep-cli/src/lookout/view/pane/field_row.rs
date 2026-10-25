@@ -98,8 +98,6 @@ pub(super) fn leaf_line(
         // Shown only. A Flockfile still writes it, and the cost cell beside
         // it reports what doing so would cost.
         Some(Lock::NoWidget) => '~',
-        // Enter opens a screen of its own for this row.
-        Some(Lock::SubScreen) => '\u{203a}',
         None => ' ',
     };
     let mut rest = String::from(lock);
@@ -188,7 +186,7 @@ fn key_cell(pane: &ConfigPane, index: usize, field: &Field) -> String {
 }
 
 /// The glyph in front of a row that opens and closes.
-fn open_glyph(open: bool) -> char {
+pub(super) fn open_glyph(open: bool) -> char {
     if open { '\u{25be}' } else { '\u{25b8}' }
 }
 
