@@ -78,9 +78,14 @@ impl Tree {
     /// does nothing and `child` gets the grace to exit by itself;
     /// [`Signal::Kill`] skips the wait.
     ///
-    /// On unix the final kill names the group by `child`'s pid after `child`
-    /// has been reaped. While any member lives the group keeps the pid from
-    /// being reused, but once the group is empty a new process could take it.
+    /// A child that has left its group with `setpgid` or `setsid` is signalled
+    /// and killed by its own pid instead. Its descendants that stayed in the
+    /// group are reached only while the group is still led by that pid.
+    ///
+    /// If `child` exits within the grace, it is reaped before the final kill
+    /// names its group by pid. While any member lives the group keeps the pid
+    /// from being reused, but once the group is empty a new process could take
+    /// it. `std` has no wait that leaves the child unreaped to close that gap.
     ///
     /// # Errors
     ///
@@ -107,7 +112,7 @@ impl Tree {
                 std::thread::sleep(POLL.min(left));
             }
         }
-        self.kill(child)?;
+        self.kill(child, status.is_some())?;
         match status {
             Some(status) => Ok(status),
             None => child.wait(),
@@ -118,7 +123,7 @@ impl Tree {
     /// for: the signal was the kill, or could not be delivered.
     #[cfg(unix)]
     fn send(&self, child: &Child, signal: Signal) -> bool {
-        signal != Signal::Kill && crate::group::signal_group(child.id(), signal).is_ok()
+        signal != Signal::Kill && Self::deliver(child, signal).is_ok()
     }
 
     #[cfg(windows)]
@@ -126,16 +131,36 @@ impl Tree {
         signal != Signal::Kill
     }
 
+    /// The group led by `child`, or `child` alone once it has left that group
+    /// with `setpgid` or `setsid`, which would leave the group empty.
+    ///
+    /// `child` must not be reaped: a reaped pid may name a stranger.
     #[cfg(unix)]
-    fn kill(&self, child: &Child) -> io::Result<()> {
-        match crate::group::signal_group(child.id(), Signal::Kill) {
+    fn deliver(child: &Child, signal: Signal) -> Result<(), crate::group::GroupError> {
+        match crate::group::signal_group(child.id(), signal) {
+            Err(error) if error.is_gone() => crate::group::signal_process(child.id(), signal),
+            other => other,
+        }
+    }
+
+    /// Kills the tree. `reaped` is whether `child` has been waited on, so its
+    /// pid may be gone or reused: only the group is named then, and only a
+    /// descendant can still be in it.
+    #[cfg(unix)]
+    fn kill(&self, child: &Child, reaped: bool) -> io::Result<()> {
+        let result = if reaped {
+            crate::group::signal_group(child.id(), Signal::Kill)
+        } else {
+            Self::deliver(child, Signal::Kill)
+        };
+        match result {
             Err(error) if !error.is_gone() => Err(io::Error::other(error)),
             _ => Ok(()),
         }
     }
 
     #[cfg(windows)]
-    fn kill(&self, _child: &Child) -> io::Result<()> {
+    fn kill(&self, _child: &Child, _reaped: bool) -> io::Result<()> {
         self.job.terminate(KILLED_EXIT_CODE)
     }
 }
@@ -169,6 +194,7 @@ mod tests {
     impl Drop for Cleanup {
         fn drop(&mut self) {
             let _ = crate::group::signal_group(self.0, Signal::Kill);
+            let _ = crate::group::signal_process(self.0, Signal::Kill);
         }
     }
 
@@ -221,5 +247,24 @@ mod tests {
         eof.recv_timeout(Duration::from_secs(10))
             .expect("the grandchild outlived its group")
             .unwrap();
+    }
+
+    #[test]
+    fn a_child_that_left_its_group_is_still_stopped() {
+        // `perl`, since `setsid(1)` is absent on macOS. The child puts itself
+        // in a group of its own, so the group `spawn` made is empty and every
+        // group signal answers `ESRCH`.
+        let (tree, mut child, line) = spawn_ready(
+            r#"exec perl -e '$SIG{TERM} = "IGNORE"; setpgrp(0, 0); print "ready\n"; $| = 1; sleep 600'"#,
+        );
+        let _cleanup = Cleanup(child.id());
+        assert_eq!(line, "ready");
+
+        let grace = Duration::from_millis(300);
+        let started = Instant::now();
+        let status = tree.stop(&mut child, Signal::Term, grace).unwrap();
+
+        assert!(started.elapsed() >= grace, "the child was given its grace");
+        assert_eq!(status.signal(), Some(9));
     }
 }

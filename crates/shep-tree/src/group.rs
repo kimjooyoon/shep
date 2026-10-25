@@ -128,7 +128,23 @@ pub fn signal_group(pid: u32, signal: Signal) -> Result<(), GroupError> {
 #[cfg(unix)]
 fn send(pid: u32, signal: NixSignal) -> Result<(), GroupError> {
     let leader = signallable_pid(pid)?;
-    signal::kill(Pid::from_raw(-leader), signal).map_err(|errno| GroupError::Delivery {
+    deliver(pid, Pid::from_raw(-leader), signal)
+}
+
+/// Sends `signal` to the one process `pid`, not its group.
+///
+/// For a child that has left the group it led, which [`signal_group`] no
+/// longer reaches. The caller must know `pid` is not yet reaped, or it may
+/// name a stranger.
+#[cfg(unix)]
+pub(crate) fn signal_process(pid: u32, signal: Signal) -> Result<(), GroupError> {
+    let target = signallable_pid(pid)?;
+    deliver(pid, Pid::from_raw(target), signal.to_nix())
+}
+
+#[cfg(unix)]
+fn deliver(pid: u32, target: Pid, signal: NixSignal) -> Result<(), GroupError> {
+    signal::kill(target, signal).map_err(|errno| GroupError::Delivery {
         pid,
         code: errno as i32,
     })
