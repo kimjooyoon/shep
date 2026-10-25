@@ -143,7 +143,8 @@ async fn delete_with(
     }
 }
 
-/// Refuses `selectors` when an exact one names a dog `dest` adopted
+/// Refuses `selectors` when an exact one names a dog `dest` adopted, or one
+/// whose source this build does not recognize
 ///
 /// The host's flock is listed only if a selector is exact: a sweep passes dogs
 /// by, so it needs no answer. A built-in dog is left to the host's shepherd,
