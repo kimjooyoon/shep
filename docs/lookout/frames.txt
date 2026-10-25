@@ -954,10 +954,10 @@ shep lookout   /home/ada/.shep                                                  
   bark                                                                                                                            no       built-in                  not running    
   metrics                                                                                                                         yes      built-in                  not running    
                                                                                                                                                                                     
-  set daemon.log_level to info? needs shep daemon reload, and it will not apply if the shepherd was booted with SHEP_LOG_LEVEL or --log-level  enter confirms, any other key cancels
+  set daemon.log_level to info? needs shep daemon reload, and will not apply if the shepherd was booted with SHEP_LOG_LEVEL or --log-level  enter confirms, any other key cancels   
                                                                                                                                                                                     
                                                                                                                                                                                     
-set daemon.log_level to info? needs shep daemon reload, and it will not apply if the shepherd was booted with SHEP_LOG_LEVEL or --log-level  enter confirms, any ot… control enabled
+set daemon.log_level to info? needs shep daemon reload, and will not apply if the shepherd was booted with SHEP_LOG_LEVEL or --log-level  enter confirms, any other… control enabled
 
 === settings_typing  (120x30) ===
 The socket editor open mid-path. The status bar names the field being typed, not the dashboard's own filter box, which is what it showed here before the fix this frame now pins.

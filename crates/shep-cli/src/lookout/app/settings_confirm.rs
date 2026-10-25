@@ -82,7 +82,7 @@ fn outranked(key: &str) -> String {
         return String::new();
     };
     format!(
-        ", and it will not apply if the shepherd was booted with SHEP_{} or --{}",
+        ", and will not apply if the shepherd was booted with SHEP_{} or --{}",
         name.to_uppercase(),
         name.replace('_', "-")
     )
