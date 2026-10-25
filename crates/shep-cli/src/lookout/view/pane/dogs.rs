@@ -226,3 +226,146 @@ fn dogs_body_from(
         lines,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+    use shep_core::config::AppConfig;
+    use shep_core::protocol::SheepConfigView;
+
+    use super::super::draw::pane_lines;
+    use super::super::fixtures::{marked, text_of};
+    use crate::lookout::pane::{ConfigPane, ListedDog, SheepDogEntry};
+    use crate::lookout::view::fixtures;
+
+    const TOKEN: &str = "sk-live-51Hx9Qa";
+    const PASSWORD: &str = "hunter2-legacy";
+
+    fn schema() -> serde_json::Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "concurrency": { "type": "integer" },
+                "token": { "type": "string", "x-shep-secret": true },
+            },
+        })
+    }
+
+    fn listed(name: &str, schema: Option<serde_json::Value>) -> ListedDog {
+        ListedDog {
+            entry: SheepDogEntry {
+                name: name.to_owned(),
+                adopted_path: None,
+                schema,
+            },
+            asked: true,
+        }
+    }
+
+    /// `web` on its `dogs` tab: `jobs` set, `deploy` unset, `legacy`
+    /// read-only, every row collapsed.
+    fn web_dogs() -> ConfigPane {
+        let mut config = AppConfig {
+            name: "web".into(),
+            ..AppConfig::default()
+        };
+        let table = |value: serde_json::Value| value.as_object().cloned().expect("a table");
+        config.dogs.insert(
+            "jobs".into(),
+            table(json!({ "concurrency": 7, "token": TOKEN })).into(),
+        );
+        config.dogs.insert(
+            "legacy".into(),
+            table(json!({ "url": format!("https://ops:{PASSWORD}@example.test") })).into(),
+        );
+        let mut pane = ConfigPane::sheep(SheepConfigView::new(config, Vec::new(), Vec::new()));
+        pane.set_group(9);
+        pane.list_dogs(vec![
+            listed("jobs", Some(schema())),
+            listed("deploy", Some(json!({ "type": "object", "properties": {} }))),
+            listed("legacy", None),
+        ]);
+        pane
+    }
+
+    fn drawn(pane: &ConfigPane, width: u16, height: u16) -> String {
+        text_of(&pane_lines(pane, fixtures::plain(), width, height)).join("\n")
+    }
+
+    #[test]
+    fn a_collapsed_row_names_its_state_and_key_names_and_never_a_value() {
+        let text = drawn(&web_dogs(), 120, 0);
+        let row = |dog: &str| {
+            text.lines()
+                .find(|line| line.contains(dog))
+                .unwrap_or_else(|| panic!("{dog} is drawn: {text}"))
+        };
+        assert!(row("deploy").contains("(no table)"), "{text}");
+        assert!(
+            row("jobs").contains("set") && row("jobs").contains("concurrency, token"),
+            "{text}"
+        );
+        assert!(
+            row("legacy").contains("read-only") && row("legacy").contains("url"),
+            "{text}"
+        );
+        for secret in [TOKEN, PASSWORD, "7"] {
+            assert!(!text.contains(secret), "{secret} leaked: {text}");
+        }
+    }
+
+    #[test]
+    fn an_open_dog_draws_its_table_under_its_row_with_the_secret_masked() {
+        let mut pane = web_dogs();
+        let jobs = pane
+            .dogs_tab()
+            .rows()
+            .iter()
+            .position(|row| row.name() == "jobs")
+            .expect("listed");
+        pane.toggle_dog(jobs);
+        let text = drawn(&pane, 120, 0);
+        let lines: Vec<&str> = text.lines().collect();
+        let head = lines
+            .iter()
+            .position(|line| line.contains("\u{25be}") && line.contains("jobs"))
+            .unwrap_or_else(|| panic!("jobs is open: {text}"));
+        let concurrency = lines[head + 1];
+        assert!(
+            concurrency.contains("concurrency") && concurrency.contains('7'),
+            "{concurrency:?}"
+        );
+        let indent = |line: &str| line.len() - line.trim_start().len();
+        assert!(indent(concurrency) > indent(lines[head]), "{text}");
+        let token = lines[head + 2];
+        assert!(token.contains("token") && token.contains("<set>"), "{token:?}");
+        assert!(!text.contains(TOKEN), "{text}");
+    }
+
+    #[test]
+    fn the_cursor_row_is_drawn_at_every_height() {
+        let mut pane = web_dogs();
+        pane.set_rows(3);
+        pane.move_to_last();
+        for height in 3..=8 {
+            let text = drawn(&pane, 120, height);
+            assert_eq!(marked(&text), 1, "height {height}: {text}");
+        }
+    }
+
+    #[test]
+    fn a_tab_with_no_dogs_says_so() {
+        let mut pane = ConfigPane::sheep(SheepConfigView::new(
+            AppConfig {
+                name: "web".into(),
+                ..AppConfig::default()
+            },
+            Vec::new(),
+            Vec::new(),
+        ));
+        pane.set_group(9);
+        assert!(drawn(&pane, 120, 0).contains("listing dogs..."));
+        pane.list_dogs(Vec::new());
+        assert!(drawn(&pane, 120, 0).contains("no dog publishes a sheep schema"));
+    }
+}

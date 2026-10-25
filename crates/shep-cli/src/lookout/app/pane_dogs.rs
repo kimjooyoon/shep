@@ -286,3 +286,493 @@ fn no_schema_notice(dog: &str) -> Notice {
         "{dog} publishes no sheep schema, so its table is not edited here"
     ))
 }
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+    use shep_core::protocol::{RpcError, RpcErrorCode};
+
+    use super::*;
+    use crate::lookout::app::testing::*;
+    use crate::lookout::pane::DogTableState;
+
+    fn dog_names(app: &App) -> Vec<&str> {
+        app.config_pane()
+            .expect("a pane")
+            .dogs_tab()
+            .rows()
+            .iter()
+            .map(DogRow::name)
+            .collect()
+    }
+
+    fn row<'a>(app: &'a App, dog: &str) -> &'a DogRow {
+        app.config_pane()
+            .expect("a pane")
+            .dogs_tab()
+            .rows()
+            .iter()
+            .find(|row| row.name() == dog)
+            .unwrap_or_else(|| panic!("{dog} is not listed"))
+    }
+
+    fn cursor_dog(app: &App) -> Option<&str> {
+        let pane = app.config_pane()?;
+        match pane.cursor()? {
+            PaneRow::Dog(index) => pane.dogs_tab().rows().get(index).map(DogRow::name),
+            _ => None,
+        }
+    }
+
+    #[test]
+    fn the_dogs_tab_opens_with_every_dog_collapsed_and_no_probe_sent() {
+        let mut app = app_in_web(Control::Allowed);
+        let ask = ask_dogs(&mut app);
+        let effect = app.update(Msg::SheepDogNames {
+            sheep: "web".into(),
+            ask,
+            dogs: listing(),
+        });
+        assert_eq!(effect, Effect::None, "the listing probes no dog");
+        assert_eq!(dog_names(&app), ["deploy", "jobs", "legacy"]);
+        for dog in ["deploy", "jobs", "legacy"] {
+            assert!(!row(&app, dog).is_open(), "{dog} starts collapsed");
+        }
+        assert!(
+            app.config_pane()
+                .expect("a pane")
+                .rows()
+                .iter()
+                .all(|row| matches!(row, PaneRow::Dog(_))),
+            "no table is drawn yet"
+        );
+    }
+
+    #[test]
+    fn opening_a_dog_sends_one_probe_and_its_table_draws_inline() {
+        let mut app = app_in_dogs(Control::Allowed);
+        cursor_on(&mut app, "jobs");
+        assert_eq!(
+            app.update(Msg::Key(KeyPress::Confirm)),
+            Effect::LoadSheepDog {
+                sheep: "web".into(),
+                dog: "jobs".into(),
+                adopted_path: Some("/opt/jobs".into()),
+            }
+        );
+        assert_eq!(
+            app.update(Msg::SheepDog {
+                sheep: "web".into(),
+                entry: jobs_entry(),
+            }),
+            Effect::None
+        );
+        assert!(row(&app, "jobs").is_open());
+        let pane = app.config_pane().expect("a pane");
+        assert!(
+            pane.rows()
+                .iter()
+                .any(|row| matches!(row, PaneRow::Under { .. })),
+            "the table's rows sit under the dog's"
+        );
+        assert_eq!(
+            row(&app, "jobs").table().expect("built").value("concurrency"),
+            "2"
+        );
+
+        // Closed and opened again, the answer is kept: no second probe.
+        assert_eq!(app.update(Msg::Key(KeyPress::Confirm)), Effect::None);
+        assert!(!row(&app, "jobs").is_open());
+        assert_eq!(app.update(Msg::Key(KeyPress::Confirm)), Effect::None);
+        assert!(row(&app, "jobs").is_open());
+    }
+
+    /// `SetSheepDogSettings` replaces the table, so the one write carries
+    /// the secret the operator never touched exactly as it was.
+    #[test]
+    fn an_edit_inside_an_inline_table_writes_the_whole_table_once() {
+        let mut app = app_in_jobs_table();
+        type_concurrency(&mut app, "4");
+        let effect = close_jobs_table(&mut app);
+        assert!(!format!("{effect:?}").contains(TOKEN), "{effect:?}");
+        let batch = wire_batch(effect);
+        let [
+            Sent::SetSheepDogTable {
+                name,
+                dog,
+                table: Some(table),
+                ..
+            },
+        ] = batch.as_slice()
+        else {
+            panic!("one table write: {batch:?}");
+        };
+        assert_eq!((name.as_str(), dog.as_str()), ("web", "jobs"));
+        assert_eq!(
+            serde_json::Value::Object(table.as_map().clone()),
+            json!({ "concurrency": 4, "token": TOKEN })
+        );
+        assert!(
+            matches!(app.body(), Body::FlockTable),
+            "esc lands on the dashboard"
+        );
+    }
+
+    #[test]
+    fn closing_with_a_table_open_and_no_edits_sends_nothing() {
+        let mut app = app_in_jobs_table();
+        assert_eq!(app.update(Msg::Key(KeyPress::Escape)), Effect::None);
+        assert!(matches!(app.body(), Body::FlockTable));
+    }
+
+    #[test]
+    fn a_table_closed_after_an_edit_still_writes_it() {
+        let mut app = app_in_jobs_table();
+        type_concurrency(&mut app, "4");
+        cursor_on(&mut app, "jobs");
+        let _ = app.update(Msg::Key(KeyPress::Confirm));
+        assert!(!row(&app, "jobs").is_open());
+        let batch = wire_batch(close_jobs_table(&mut app));
+        let [Sent::SetSheepDogTable { dog, .. }] = batch.as_slice() else {
+            panic!("one table write: {batch:?}");
+        };
+        assert_eq!(dog, "jobs");
+    }
+
+    #[test]
+    fn a_landed_table_write_says_so_and_names_no_value() {
+        let mut app = app_in_jobs_table();
+        type_concurrency(&mut app, "4");
+        let mut batch = wire_batch(close_jobs_table(&mut app));
+        let effect = app.update(Msg::Replied {
+            sent: batch.remove(0),
+            result: Ok(Response::SheepDogSettingsSet {
+                name: "web".into(),
+                dog: "jobs".into(),
+            }),
+        });
+        assert_eq!(
+            effect,
+            Effect::Send(Sent::SheepConfig { name: "web".into() })
+        );
+        let notice = app.notice().expect("reported").to_string();
+        assert_eq!(notice, "web: its jobs table is written, and jobs is told");
+    }
+
+    #[test]
+    fn a_dog_with_no_sheep_schema_opens_nothing_and_says_why() {
+        let mut app = app_in_dogs(Control::Allowed);
+        cursor_on(&mut app, "legacy");
+        assert_eq!(app.update(Msg::Key(KeyPress::Edit)), Effect::None);
+        assert!(!row(&app, "legacy").is_open());
+        let notice = app.notice().expect("a refusal").to_string();
+        assert!(notice.contains("no sheep schema"), "{notice}");
+        assert!(!notice.contains(PASSWORD), "{notice}");
+    }
+
+    #[test]
+    fn a_probe_that_finds_no_schema_leaves_the_row_closed_and_says_why() {
+        let mut app = app_in_dogs(Control::Allowed);
+        cursor_on(&mut app, "deploy");
+        let _ = app.update(Msg::Key(KeyPress::Confirm));
+        let _ = app.update(Msg::SheepDog {
+            sheep: "web".into(),
+            entry: SheepDogEntry {
+                name: "deploy".into(),
+                adopted_path: Some("/opt/deploy".into()),
+                schema: None,
+            },
+        });
+        assert!(!row(&app, "deploy").is_open());
+        let notice = app.notice().expect("a refusal").to_string();
+        assert!(notice.contains("deploy publishes no sheep schema"), "{notice}");
+    }
+
+    #[test]
+    fn a_probe_answer_for_another_sheep_opens_nothing() {
+        let mut app = app_in_dogs(Control::Allowed);
+        cursor_on(&mut app, "jobs");
+        let _ = app.update(Msg::Key(KeyPress::Confirm));
+        let _ = app.update(Msg::SheepDog {
+            sheep: "api".into(),
+            entry: jobs_entry(),
+        });
+        assert!(row(&app, "jobs").table().is_none());
+    }
+
+    #[test]
+    fn the_dogs_tab_lists_once_per_pane() {
+        let mut app = app_in_web(Control::Allowed);
+        let _ = ask_dogs(&mut app);
+        let _ = app.update(Msg::Key(KeyPress::Group(1)));
+        assert_eq!(app.update(Msg::Key(KeyPress::Group(9))), Effect::None);
+    }
+
+    #[test]
+    fn an_answer_for_a_sheep_the_pane_has_left_lists_nothing() {
+        let mut app = app_in_web(Control::Allowed);
+        let ask = ask_dogs(&mut app);
+        answer(&mut app, "api", ask, listing());
+        assert!(!app.config_pane().unwrap().dogs_tab().is_listed());
+
+        let _ = app.update(Msg::Key(KeyPress::Escape));
+        assert!(app.config_pane().is_none());
+        answer(&mut app, "web", ask, listing());
+        assert!(app.config_pane().is_none(), "a late answer opens nothing");
+        assert!(app.notice().is_none(), "silently: nothing went wrong");
+    }
+
+    #[test]
+    fn an_answer_for_a_closed_pane_lists_nothing_on_its_reopening() {
+        let mut app = app_in_web(Control::Allowed);
+        let ask = ask_dogs(&mut app);
+        let _ = app.update(Msg::Key(KeyPress::Escape));
+        let _ = app.update(Msg::Key(KeyPress::Edit));
+        let _ = app.update(Msg::Replied {
+            sent: Sent::SheepConfig { name: "web".into() },
+            result: Ok(Response::SheepConfig(Box::new(web_view(true)))),
+        });
+        assert!(app.config_pane().is_some(), "reopened");
+        answer(&mut app, "web", ask, listing());
+        assert!(!app.config_pane().unwrap().dogs_tab().is_listed());
+    }
+
+    /// `d` there would file `dogs = null`, and the close would then drop
+    /// every table the sheep carries in one write; `space` files nothing on
+    /// a row that holds no value.
+    #[test]
+    fn space_on_a_dog_row_files_nothing() {
+        let mut app = app_in_dogs(Control::Allowed);
+        cursor_on(&mut app, "jobs");
+        assert_eq!(app.update(Msg::Key(KeyPress::Cycle)), Effect::None);
+        assert!(app.config_pane().unwrap().edits().is_empty());
+        assert!(app.notice().is_none(), "{:?}", app.notice());
+    }
+
+    #[test]
+    fn d_arms_and_enter_sends_the_removal() {
+        let mut app = app_in_dogs(Control::Allowed);
+        cursor_on(&mut app, "jobs");
+        assert_eq!(app.update(Msg::Key(KeyPress::Remove)), Effect::None);
+        assert_eq!(app.config_pane().unwrap().dogs_tab().armed(), Some("jobs"));
+        let sent = app.update(Msg::Key(KeyPress::Confirm));
+        let Effect::Send(Sent::SetSheepDogTable {
+            ref name,
+            ref dog,
+            table: None,
+            ..
+        }) = sent
+        else {
+            panic!("the confirm sends the removal: {sent:?}");
+        };
+        assert_eq!((name.as_str(), dog.as_str()), ("web", "jobs"));
+        assert_eq!(
+            wire(sent),
+            Request::SetSheepDogSettings {
+                name: "web".into(),
+                dog: "jobs".into(),
+                table: None,
+            }
+        );
+        assert_eq!(app.config_pane().unwrap().dogs_tab().armed(), None);
+    }
+
+    #[test]
+    fn any_other_key_disarms_and_the_first_esc_is_eaten() {
+        let mut app = app_in_dogs(Control::Allowed);
+        cursor_on(&mut app, "jobs");
+        let _ = app.update(Msg::Key(KeyPress::Remove));
+        let _ = app.update(Msg::Key(KeyPress::SelectDown));
+        assert_eq!(app.config_pane().unwrap().dogs_tab().armed(), None);
+        assert_eq!(cursor_dog(&app), Some("legacy"));
+
+        let _ = app.update(Msg::Key(KeyPress::Remove));
+        assert_eq!(
+            app.config_pane().unwrap().dogs_tab().armed(),
+            Some("legacy")
+        );
+        let _ = app.update(Msg::Key(KeyPress::Escape));
+        assert_eq!(app.config_pane().unwrap().dogs_tab().armed(), None);
+        assert!(app.config_pane().is_some(), "the pane stays up");
+    }
+
+    #[test]
+    fn a_row_with_no_table_arms_nothing() {
+        let mut app = app_in_dogs(Control::Allowed);
+        cursor_on(&mut app, "deploy");
+        let _ = app.update(Msg::Key(KeyPress::Remove));
+        assert_eq!(app.config_pane().unwrap().dogs_tab().armed(), None);
+        assert!(app.notice().is_none(), "{:?}", app.notice());
+    }
+
+    #[test]
+    fn a_closed_gate_refuses_the_removal_in_its_own_words() {
+        let mut app = app_in_dogs(Control::ReadOnly);
+        cursor_on(&mut app, "jobs");
+        assert_eq!(app.update(Msg::Key(KeyPress::Remove)), Effect::None);
+        assert_eq!(app.config_pane().unwrap().dogs_tab().armed(), None);
+        assert_eq!(
+            app.notice().map(ToString::to_string),
+            Some(READ_ONLY_REFUSAL.to_string())
+        );
+    }
+
+    #[test]
+    fn a_landed_removal_notices_and_the_re_read_refreshes_the_tab() {
+        let mut app = app_in_dogs(Control::Allowed);
+        cursor_on(&mut app, "jobs");
+        let _ = app.update(Msg::Key(KeyPress::Remove));
+        let Effect::Send(sent) = app.update(Msg::Key(KeyPress::Confirm)) else {
+            panic!("the removal goes out");
+        };
+        let effect = app.update(Msg::Replied {
+            sent,
+            result: Ok(Response::SheepDogSettingsSet {
+                name: "web".into(),
+                dog: "jobs".into(),
+            }),
+        });
+        assert_eq!(
+            effect,
+            Effect::Send(Sent::SheepConfig { name: "web".into() })
+        );
+        let notice = app.notice().expect("reported").to_string();
+        assert_eq!(notice, "web: its jobs table is removed, and jobs is told");
+
+        let _ = app.update(Msg::Replied {
+            sent: Sent::SheepConfig { name: "web".into() },
+            result: Ok(Response::SheepConfig(Box::new(web_view(false)))),
+        });
+        assert_eq!(row(&app, "jobs").state(), DogTableState::Unset);
+        assert_eq!(cursor_dog(&app), Some("jobs"));
+    }
+
+    #[test]
+    fn a_refused_write_lands_its_message_and_no_value() {
+        let mut app = app_in_dogs(Control::Allowed);
+        let table: serde_json::Map<String, serde_json::Value> =
+            json!({ "token": TOKEN }).as_object().cloned().unwrap();
+        let sent = Sent::SetSheepDogTable {
+            name: "web".into(),
+            dog: "jobs".into(),
+            ticket: 7,
+            table: Some(table.into()),
+            authority: WriteAuthority::granted(&app).expect("the gate is open"),
+        };
+        assert!(!format!("{sent:?}").contains(TOKEN), "{sent:?}");
+        let effect = app.update(Msg::Replied {
+            sent: sent.clone(),
+            result: Err(RequestError::Rpc(RpcError {
+                code: RpcErrorCode::NotFound,
+                message: "no sheep named web".into(),
+                daemon_version: None,
+            })),
+        });
+        assert_eq!(effect, Effect::None, "a refusal does not re-read");
+        let notice = app.notice().expect("reported");
+        assert!(notice.is_grave());
+        assert_eq!(notice.to_string(), "web: jobs: no sheep named web");
+
+        let _ = app.update(Msg::Unsent { sent });
+        let notice = app.notice().expect("reported").to_string();
+        assert_eq!(notice, "web: its jobs table was not sent");
+    }
+
+    /// `Msg` derives `Debug`, and a listing or a probe answer carries each
+    /// dog's schema, defaults included (IR-41).
+    #[test]
+    fn the_listing_and_probe_answers_debug_name_no_schema() {
+        let entry = SheepDogEntry {
+            name: "jobs".into(),
+            adopted_path: None,
+            schema: Some(json!({ "default": TOKEN })),
+        };
+        let listed = Msg::SheepDogNames {
+            sheep: "web".into(),
+            ask: 1,
+            dogs: vec![ListedDog {
+                entry: entry.clone(),
+                asked: true,
+            }],
+        };
+        assert!(!format!("{listed:?}").contains(TOKEN), "{listed:?}");
+        let probed = Msg::SheepDog {
+            sheep: "web".into(),
+            entry,
+        };
+        assert!(!format!("{probed:?}").contains(TOKEN), "{probed:?}");
+    }
+
+    /// The sheep is the table's owner, so `r` re-reads the sheep and the
+    /// open table takes its values from the answer, cursor and edits kept.
+    #[test]
+    fn r_re_reads_the_sheep_and_rebuilds_the_open_table_keeping_the_cursor() {
+        let mut app = app_in_jobs_table();
+        type_concurrency(&mut app, "4");
+        pane_to(&mut app, "token");
+        let cursor = app.config_pane().unwrap().view().cursor();
+        assert_eq!(
+            app.update(Msg::Key(KeyPress::Refresh)),
+            Effect::Send(Sent::SheepConfig { name: "web".into() })
+        );
+        let mut view = web_view(true);
+        let moved = json!({ "concurrency": 9, "token": "rotated" });
+        view.config.dogs.insert(
+            "jobs".into(),
+            moved.as_object().cloned().expect("a table").into(),
+        );
+        let _ = app.update(Msg::Replied {
+            sent: Sent::SheepConfig { name: "web".into() },
+            result: Ok(Response::SheepConfig(Box::new(view))),
+        });
+        assert!(row(&app, "jobs").is_open());
+        assert_eq!(
+            row(&app, "jobs").table().expect("built").value("concurrency"),
+            "9"
+        );
+        assert_eq!(app.config_pane().unwrap().view().cursor(), cursor);
+        assert_eq!(table_edits(&app), 1, "the operator's edit survives");
+    }
+
+    #[test]
+    fn a_re_read_of_another_sheep_leaves_the_open_table_alone() {
+        let mut app = app_in_jobs_table();
+        let mut view = web_view(true);
+        view.name = "api".into();
+        let other = json!({ "concurrency": 64 });
+        view.config.dogs.insert(
+            "jobs".into(),
+            other.as_object().cloned().expect("a table").into(),
+        );
+        let _ = app.update(Msg::Replied {
+            sent: Sent::SheepConfig { name: "api".into() },
+            result: Ok(Response::SheepConfig(Box::new(view))),
+        });
+        assert_eq!(
+            row(&app, "jobs").table().expect("built").value("concurrency"),
+            "2"
+        );
+    }
+
+    #[test]
+    fn a_reply_of_the_wrong_kind_is_reported_and_re_reads_nothing() {
+        let mut app = app_in_dogs(Control::Allowed);
+        let effect = app.update(Msg::Replied {
+            sent: Sent::SetSheepDogTable {
+                name: "web".into(),
+                dog: "jobs".into(),
+                ticket: 7,
+                table: None,
+                authority: WriteAuthority::granted(&app).expect("the gate is open"),
+            },
+            result: Ok(Response::SheepConfig(Box::new(web_view(true)))),
+        });
+        assert_eq!(effect, Effect::None);
+        let notice = app.notice().expect("reported");
+        assert!(notice.is_grave());
+        assert_eq!(
+            notice.to_string(),
+            "web: jobs: the shepherd answered something this lookout does not understand"
+        );
+    }
+}
