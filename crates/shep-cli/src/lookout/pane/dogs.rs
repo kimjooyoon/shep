@@ -472,7 +472,7 @@ impl ConfigPane {
     /// Carries a previous pane's tab onto this one's tables, for a re-read
     /// that rebuilt the pane under it.
     pub(in crate::lookout) fn adopt_dogs_tab(&mut self, previous: DogsTab) {
-        self.dogs_tab = previous;
+        *self.dogs_tab = previous;
         let tables = self.sheep_tables();
         self.dogs_tab.refresh(&tables);
         self.clamp_view();

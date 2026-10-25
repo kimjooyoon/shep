@@ -99,7 +99,7 @@ pub struct ConfigPane {
     pub(super) list: Option<Box<ListPane>>,
     /// The dogs a sheep's `dogs` tab lists, and the tables opened under
     /// them. Empty for any other target.
-    pub(super) dogs_tab: DogsTab,
+    pub(super) dogs_tab: Box<DogsTab>,
     /// The dog's `[<name>]` table as TOML text, with the schema its rows
     /// were built from, and [`None`] for a sheep.
     ///
@@ -181,7 +181,7 @@ impl ConfigPane {
             edits: Edits::default(),
             env_typing: None,
             list: None,
-            dogs_tab: DogsTab::default(),
+            dogs_tab: Box::default(),
             section: None,
             dog_table: None,
             reshapes: Arc::default(),
@@ -249,7 +249,7 @@ impl ConfigPane {
             edits: Edits::default(),
             env_typing: None,
             list: None,
-            dogs_tab: DogsTab::default(),
+            dogs_tab: Box::default(),
             section: Some(Box::new(DogSection {
                 toml: section,
                 schema,

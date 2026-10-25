@@ -79,6 +79,8 @@ pub(super) fn dog_row_for<'a>(frame: &'a str, name: &str) -> Option<&'a str> {
 
 /// A sheep's `dogs` tab row for `name`: [`dog_row_for`] with the open or
 /// closed glyph that precedes the name skipped.
+// Dead on Windows: only the cfg(unix) tests call it.
+#[cfg_attr(windows, allow(dead_code))]
 pub(super) fn tab_dog_row_for<'a>(frame: &'a str, name: &str) -> Option<&'a str> {
     frame.lines().find(|line| {
         let mut tokens = line.trim_start_matches('>').split_whitespace();

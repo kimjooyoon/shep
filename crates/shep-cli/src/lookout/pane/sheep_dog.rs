@@ -13,7 +13,6 @@ use serde_json::{Map, Value};
 use super::super::edits::{EditKey, Edits};
 use super::super::field::{Flattened, flatten_values, flattened};
 use super::super::viewport::Viewport;
-use super::dogs::DogsTab;
 use super::entries::EntryRows;
 use super::union::arm_fields;
 use super::{ConfigPane, PaneEdit, PaneTarget};
@@ -84,7 +83,7 @@ impl ConfigPane {
             edits: Edits::default(),
             env_typing: None,
             list: None,
-            dogs_tab: DogsTab::default(),
+            dogs_tab: Box::default(),
             section: None,
             dog_table: Some(Box::new(SheepDogTable {
                 paths,
