@@ -282,7 +282,10 @@ mod tests {
         pane.set_group(9);
         pane.list_dogs(vec![
             listed("jobs", Some(schema())),
-            listed("deploy", Some(json!({ "type": "object", "properties": {} }))),
+            listed(
+                "deploy",
+                Some(json!({ "type": "object", "properties": {} })),
+            ),
             listed("legacy", None),
         ]);
         pane
@@ -338,7 +341,10 @@ mod tests {
         let indent = |line: &str| line.len() - line.trim_start().len();
         assert!(indent(concurrency) > indent(lines[head]), "{text}");
         let token = lines[head + 2];
-        assert!(token.contains("token") && token.contains("<set>"), "{token:?}");
+        assert!(
+            token.contains("token") && token.contains("<set>"),
+            "{token:?}"
+        );
         assert!(!text.contains(TOKEN), "{text}");
     }
 

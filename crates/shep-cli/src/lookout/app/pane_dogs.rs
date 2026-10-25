@@ -376,7 +376,10 @@ mod tests {
             "the table's rows sit under the dog's"
         );
         assert_eq!(
-            row(&app, "jobs").table().expect("built").value("concurrency"),
+            row(&app, "jobs")
+                .table()
+                .expect("built")
+                .value("concurrency"),
             "2"
         );
 
@@ -485,7 +488,10 @@ mod tests {
         });
         assert!(!row(&app, "deploy").is_open());
         let notice = app.notice().expect("a refusal").to_string();
-        assert!(notice.contains("deploy publishes no sheep schema"), "{notice}");
+        assert!(
+            notice.contains("deploy publishes no sheep schema"),
+            "{notice}"
+        );
     }
 
     #[test]
@@ -727,7 +733,10 @@ mod tests {
         });
         assert!(row(&app, "jobs").is_open());
         assert_eq!(
-            row(&app, "jobs").table().expect("built").value("concurrency"),
+            row(&app, "jobs")
+                .table()
+                .expect("built")
+                .value("concurrency"),
             "9"
         );
         assert_eq!(app.config_pane().unwrap().view().cursor(), cursor);
@@ -749,7 +758,10 @@ mod tests {
             result: Ok(Response::SheepConfig(Box::new(view))),
         });
         assert_eq!(
-            row(&app, "jobs").table().expect("built").value("concurrency"),
+            row(&app, "jobs")
+                .table()
+                .expect("built")
+                .value("concurrency"),
             "2"
         );
     }

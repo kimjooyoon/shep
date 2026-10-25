@@ -327,7 +327,10 @@ pub(super) fn cursor_on(app: &mut App, dog: &str) {
     for _ in 0..row {
         let _ = app.update(Msg::Key(KeyPress::SelectDown));
     }
-    assert_eq!(dog_row(app, dog), Some(app.config_pane().unwrap().view().cursor()));
+    assert_eq!(
+        dog_row(app, dog),
+        Some(app.config_pane().unwrap().view().cursor())
+    );
 }
 
 /// `app_in_dogs`, with `jobs` opened and its table up inline, the cursor on

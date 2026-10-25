@@ -226,7 +226,9 @@ mod tests {
         // survive it uncut.
         let text = text_of(&[legend_line(fixtures::plain(), 160)]);
         assert!(
-            text[0].trim_end().ends_with("-> changed by you, not yet written"),
+            text[0]
+                .trim_end()
+                .ends_with("-> changed by you, not yet written"),
             "{:?}",
             text[0]
         );

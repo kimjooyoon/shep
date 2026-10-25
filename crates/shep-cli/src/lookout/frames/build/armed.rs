@@ -14,8 +14,8 @@ use crate::commands::settings::{SettingField, load_settings};
 use crate::commands::shep_toml::ShepToml;
 use crate::lookout::app::{ActionVerb, App, Effect, KeyPress, Msg, RevealedValue, RowKey, Sent};
 use crate::lookout::frames::fixtures::{
-    close_dialog_config_view, dogs_listing, edit_pane_config_view, flock_without_api,
-    jobs_entry, kelpie_config_view, kelpie_entry, move_settings_cursor_to, restarted_api,
+    close_dialog_config_view, dogs_listing, edit_pane_config_view, flock_without_api, jobs_entry,
+    kelpie_config_view, kelpie_entry, move_settings_cursor_to, restarted_api,
     settings_snapshot_for_gallery, settings_snapshot_with_dog_drift, sheep_dogs_config_view,
 };
 use crate::lookout::frames::scene::Scene;
@@ -257,8 +257,7 @@ pub(super) fn apply_post_tick_scene(app: &mut App, which: Scene) {
             });
             // The `dogs` tab, listed with every dog collapsed. The cursor
             // starts on `deploy`, sorted before `jobs` by name.
-            let Effect::ListSheepDogs { ask, .. } = app.update(Msg::Key(KeyPress::Group(9)))
-            else {
+            let Effect::ListSheepDogs { ask, .. } = app.update(Msg::Key(KeyPress::Group(9))) else {
                 panic!("the dogs tab lists its dogs");
             };
             app.update(Msg::SheepDogNames {
@@ -301,8 +300,7 @@ pub(super) fn apply_post_tick_scene(app: &mut App, which: Scene) {
                 },
                 result: Ok(Response::SheepConfig(Box::new(kelpie_config_view()))),
             });
-            let Effect::ListSheepDogs { ask, .. } = app.update(Msg::Key(KeyPress::Group(9)))
-            else {
+            let Effect::ListSheepDogs { ask, .. } = app.update(Msg::Key(KeyPress::Group(9))) else {
                 panic!("the dogs tab lists its dogs");
             };
             app.update(Msg::SheepDogNames {
@@ -409,7 +407,7 @@ pub(super) fn apply_post_tick_scene(app: &mut App, which: Scene) {
 #[cfg(test)]
 mod tests {
     use crate::lookout::frames::build::probe::{
-        dog_row_for, marked_row_name_starts_with, row_for, selected_line,
+        dog_row_for, marked_row_name_starts_with, row_for, selected_line, tab_dog_row_for,
     };
     use crate::lookout::frames::render::render_text;
     use crate::lookout::frames::scene;
@@ -688,23 +686,23 @@ mod tests {
         // ones that carry a table.
         let row_scene = render_text(&scene(Scene::SheepDogsRow).1);
         assert!(
-            dog_row_for(&row_scene, "deploy")
+            tab_dog_row_for(&row_scene, "deploy")
                 .is_some_and(|row| row.contains('-') && row.contains("(no table)")),
             "deploy is unset: {row_scene:?}"
         );
         assert!(
-            dog_row_for(&row_scene, "jobs")
+            tab_dog_row_for(&row_scene, "jobs")
                 .is_some_and(|row| row.contains("set") && row.contains("concurrency")),
             "jobs is set, by key name: {row_scene:?}"
         );
         assert!(
-            dog_row_for(&row_scene, "legacy")
+            tab_dog_row_for(&row_scene, "legacy")
                 .is_some_and(|row| row.contains("read-only") && row.contains("url")),
             "legacy is read-only, by key name: {row_scene:?}"
         );
         for dog in ["deploy", "jobs", "legacy"] {
             assert!(
-                dog_row_for(&row_scene, dog).is_some_and(|row| row.contains('\u{25b8}')),
+                tab_dog_row_for(&row_scene, dog).is_some_and(|row| row.contains('\u{25b8}')),
                 "{dog} is collapsed: {row_scene:?}"
             );
         }
@@ -715,16 +713,16 @@ mod tests {
         // SheepDogsList: `jobs` open onto its table, its siblings collapsed.
         let list = render_text(&scene(Scene::SheepDogsList).1);
         assert!(
-            dog_row_for(&list, "jobs").is_some_and(|row| row.contains('\u{25be}')),
+            tab_dog_row_for(&list, "jobs").is_some_and(|row| row.contains('\u{25be}')),
             "jobs is open: {list:?}"
         );
         for dog in ["deploy", "legacy"] {
             assert!(
-                dog_row_for(&list, dog).is_some_and(|row| row.contains('\u{25b8}')),
+                tab_dog_row_for(&list, dog).is_some_and(|row| row.contains('\u{25b8}')),
                 "{dog} is collapsed: {list:?}"
             );
         }
-        assert!(list.contains("\u{25b8} hours"), "jobs's table is inline");
+        assert!(list.contains("\u{25be} hours"), "jobs's table is inline");
         assert!(!list.contains(TOKEN), "{list:?}");
         assert!(!list.contains(LEGACY_CREDENTIAL), "{list:?}");
 

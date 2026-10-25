@@ -241,15 +241,16 @@ pub fn select_node(app: &mut App, path: &str) {
             resolved(pane, row).is_some_and(|(pane, row)| match row {
                 PaneRow::Field(index) => pane.fields().fields()[index].key == path,
                 PaneRow::Table(index) => pane.table_path(index) == Some(path),
-                PaneRow::Entry(index) => pane
-                    .entry_row(index)
-                    .is_some_and(|entry| match &entry.body {
-                        EntryBody::Node { path: at, .. } => at == path,
-                        EntryBody::Leaf { field, .. } => field.key == path,
-                        EntryBody::New { field } => {
-                            format!("{}[+]", pane.fields().fields()[*field].key) == path
-                        }
-                    }),
+                PaneRow::Entry(index) => {
+                    pane.entry_row(index)
+                        .is_some_and(|entry| match &entry.body {
+                            EntryBody::Node { path: at, .. } => at == path,
+                            EntryBody::Leaf { field, .. } => field.key == path,
+                            EntryBody::New { field } => {
+                                format!("{}[+]", pane.fields().fields()[*field].key) == path
+                            }
+                        })
+                }
                 PaneRow::Choice { .. }
                 | PaneRow::Arm { .. }
                 | PaneRow::Env(_)
