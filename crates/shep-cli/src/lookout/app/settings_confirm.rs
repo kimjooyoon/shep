@@ -111,7 +111,7 @@ mod tests {
     /// The row of a map draws the map's cost, so the confirm for one of its
     /// entries says the same.
     #[test]
-    fn a_map_entrys_confirm_names_the_cost_its_map_row_shows() {
+    fn the_confirm_for_a_map_entry_names_the_cost_its_map_row_shows() {
         let map = shep_toml_shape().fields.by_key("interpreters").unwrap();
         let shown = apply_needs(map.apply.as_deref());
         let entry = |edit: SettingEdit| confirm_text(&edit, StyleSource::Default);
