@@ -13,6 +13,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.1] - 2026-10-26
+
+### Added
+
+- Hold up to 1024 series a sender
+
+
 ## [0.18.0] - 2026-10-26
 
 ### Added
