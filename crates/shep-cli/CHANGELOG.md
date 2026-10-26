@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Extend the systemd start deadline before each boot stage
 - Draw a sheep's env rows on the process tab only
 - List every dog inline on the dogs tab and open one to its table
+- Env on the process tab only, every dog's table inline on the dogs tab
 
 ### Changed
 
@@ -40,6 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Share lookout's chart CPU block and swapped-body frame
 - Box the dogs tab so the config pane stays a small body variant
 - Keep the dogs tab's tests in a file of their own
+- One exit-code conversion, one flockfile load, no refuse wrapper
 
 ### Fixed
 
